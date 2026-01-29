@@ -1,0 +1,864 @@
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from dotenv import load_dotenv
+from starlette.middleware.cors import CORSMiddleware
+from motor.motor_asyncio import AsyncIOMotorClient
+import os
+import logging
+from pathlib import Path
+from pydantic import BaseModel, Field, ConfigDict, EmailStr
+from typing import List, Optional
+import uuid
+from datetime import datetime, timezone, timedelta
+import jwt
+import bcrypt
+
+ROOT_DIR = Path(__file__).parent
+load_dotenv(ROOT_DIR / '.env')
+
+import certifi
+
+# MongoDB connection
+mongo_url = os.environ['MONGO_URL']
+client = AsyncIOMotorClient(mongo_url, tlsCAFile=certifi.where())
+db = client[os.environ['DB_NAME']]
+
+# JWT Config
+JWT_SECRET = os.environ.get('JWT_SECRET', 'lifeos-secret-key-change-in-production')
+JWT_ALGORITHM = "HS256"
+JWT_EXPIRATION_HOURS = 24
+
+app = FastAPI()
+api_router = APIRouter(prefix="/api")
+security = HTTPBearer()
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+# ============ MODELS ============
+
+class UserCreate(BaseModel):
+    email: EmailStr
+    password: str
+    username: str
+
+class UserLogin(BaseModel):
+    email: EmailStr
+    password: str
+
+class UserResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str
+    email: str
+    username: str
+    current_level: int = 1
+    total_xp: int = 0
+    current_streak: int = 0
+    longest_streak: int = 0
+    created_at: str
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: UserResponse
+
+class TaskCreate(BaseModel):
+    title: str
+    description: Optional[str] = ""
+    category: str = "daily"  # daily, weekly, high_priority
+    priority: int = 1
+    estimated_time: Optional[int] = None
+    due_date: Optional[str] = None
+    tags: List[str] = []
+
+class TaskUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    category: Optional[str] = None
+    priority: Optional[int] = None
+    estimated_time: Optional[int] = None
+    due_date: Optional[str] = None
+    tags: Optional[List[str]] = None
+    status: Optional[str] = None
+
+class TaskResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str
+    user_id: str
+    title: str
+    description: str
+    category: str
+    priority: int
+    status: str
+    estimated_time: Optional[int]
+    actual_time: Optional[int]
+    due_date: Optional[str]
+    completed_at: Optional[str]
+    tags: List[str]
+    created_at: str
+    updated_at: str
+
+class NoteCreate(BaseModel):
+    title: str
+    content: str = ""
+    category: str = "general"  # study, budget, general, quick
+    tags: List[str] = []
+    is_favorite: bool = False
+
+class NoteUpdate(BaseModel):
+    title: Optional[str] = None
+    content: Optional[str] = None
+    category: Optional[str] = None
+    tags: Optional[List[str]] = None
+    is_favorite: Optional[bool] = None
+
+class NoteResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str
+    user_id: str
+    title: str
+    content: str
+    category: str
+    tags: List[str]
+    is_favorite: bool
+    created_at: str
+    updated_at: str
+
+class TransactionCreate(BaseModel):
+    type: str  # income, expense
+    amount: float
+    category: str
+    description: Optional[str] = ""
+    date: str
+    is_recurring: bool = False
+
+class TransactionUpdate(BaseModel):
+    type: Optional[str] = None
+    amount: Optional[float] = None
+    category: Optional[str] = None
+    description: Optional[str] = None
+    date: Optional[str] = None
+    is_recurring: Optional[bool] = None
+
+class TransactionResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str
+    user_id: str
+    type: str
+    amount: float
+    category: str
+    description: str
+    date: str
+    is_recurring: bool
+    created_at: str
+
+class FocusSessionCreate(BaseModel):
+    duration_planned: int
+    task_id: Optional[str] = None
+
+class FocusSessionComplete(BaseModel):
+    duration_actual: int
+    interrupted: bool = False
+
+class FocusSessionResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str
+    user_id: str
+    task_id: Optional[str]
+    duration_planned: int
+    duration_actual: Optional[int]
+    started_at: str
+    completed_at: Optional[str]
+    interrupted: bool
+
+class DailyActivityResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    date: str
+    tasks_completed: int
+    focus_time: int
+    notes_created: int
+    expenses_logged: int
+    completion_percentage: int
+
+class AchievementResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str
+    name: str
+    description: str
+    type: str
+    requirement: int
+    xp_reward: int
+    badge_icon: str
+    unlocked: bool = False
+    unlocked_at: Optional[str] = None
+
+class DashboardStats(BaseModel):
+    current_streak: int
+    longest_streak: int
+    total_xp: int
+    current_level: int
+    tasks_completed_today: int
+    tasks_total_today: int
+    focus_time_today: int
+    notes_count: int
+    weekly_completion_rate: float
+
+# ============ HELPERS ============
+
+def hash_password(password: str) -> str:
+    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+def verify_password(password: str, hashed: str) -> bool:
+    return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
+
+def create_token(user_id: str, email: str) -> str:
+    payload = {
+        "sub": user_id,
+        "email": email,
+        "exp": datetime.now(timezone.utc) + timedelta(hours=JWT_EXPIRATION_HOURS)
+    }
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    try:
+        token = credentials.credentials
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        user_id = payload.get("sub")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        user = await db.users.find_one({"id": user_id}, {"_id": 0})
+        if not user:
+            raise HTTPException(status_code=401, detail="User not found")
+        return user
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+def calculate_level(xp: int) -> int:
+    if xp < 1000:
+        return max(1, xp // 100)
+    elif xp < 4000:
+        return 10 + (xp - 1000) // 200
+    elif xp < 16500:
+        return 25 + (xp - 4000) // 500
+    else:
+        return 50 + (xp - 16500) // 1000
+
+async def add_xp(user_id: str, xp_amount: int):
+    user = await db.users.find_one({"id": user_id}, {"_id": 0})
+    if user:
+        new_xp = user.get("total_xp", 0) + xp_amount
+        new_level = calculate_level(new_xp)
+        await db.users.update_one(
+            {"id": user_id},
+            {"$set": {"total_xp": new_xp, "current_level": new_level}}
+        )
+
+async def update_streak(user_id: str):
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    yesterday = (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%d")
+    
+    user = await db.users.find_one({"id": user_id}, {"_id": 0})
+    if not user:
+        return
+    
+    # Check if user completed at least one task today
+    tasks_today = await db.tasks.count_documents({
+        "user_id": user_id,
+        "status": "completed",
+        "completed_at": {"$regex": f"^{today}"}
+    })
+    
+    if tasks_today > 0:
+        last_streak_date = user.get("last_streak_date", "")
+        current_streak = user.get("current_streak", 0)
+        longest_streak = user.get("longest_streak", 0)
+        
+        if last_streak_date == today:
+            return  # Already updated today
+        elif last_streak_date == yesterday:
+            current_streak += 1
+        else:
+            current_streak = 1
+        
+        longest_streak = max(longest_streak, current_streak)
+        
+        await db.users.update_one(
+            {"id": user_id},
+            {"$set": {
+                "current_streak": current_streak,
+                "longest_streak": longest_streak,
+                "last_streak_date": today
+            }}
+        )
+
+async def update_daily_activity(user_id: str, field: str, increment: int = 1):
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    
+    existing = await db.daily_activity.find_one({"user_id": user_id, "date": today}, {"_id": 0})
+    
+    if existing:
+        await db.daily_activity.update_one(
+            {"user_id": user_id, "date": today},
+            {"$inc": {field: increment}}
+        )
+    else:
+        activity = {
+            "id": str(uuid.uuid4()),
+            "user_id": user_id,
+            "date": today,
+            "tasks_completed": 0,
+            "focus_time": 0,
+            "notes_created": 0,
+            "expenses_logged": 0,
+            "completion_percentage": 0
+        }
+        activity[field] = increment
+        await db.daily_activity.insert_one(activity)
+
+# ============ AUTH ROUTES ============
+
+@api_router.post("/auth/register", response_model=TokenResponse)
+async def register(data: UserCreate):
+    existing = await db.users.find_one({"email": data.email}, {"_id": 0})
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    
+    existing_username = await db.users.find_one({"username": data.username}, {"_id": 0})
+    if existing_username:
+        raise HTTPException(status_code=400, detail="Username already taken")
+    
+    user_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    
+    user_doc = {
+        "id": user_id,
+        "email": data.email,
+        "username": data.username,
+        "password_hash": hash_password(data.password),
+        "current_level": 1,
+        "total_xp": 0,
+        "current_streak": 0,
+        "longest_streak": 0,
+        "last_streak_date": "",
+        "created_at": now,
+        "updated_at": now
+    }
+    
+    await db.users.insert_one(user_doc)
+    
+    token = create_token(user_id, data.email)
+    user_response = UserResponse(
+        id=user_id,
+        email=data.email,
+        username=data.username,
+        current_level=1,
+        total_xp=0,
+        current_streak=0,
+        longest_streak=0,
+        created_at=now
+    )
+    
+    return TokenResponse(access_token=token, user=user_response)
+
+@api_router.post("/auth/login", response_model=TokenResponse)
+async def login(data: UserLogin):
+    user = await db.users.find_one({"email": data.email}, {"_id": 0})
+    if not user or not verify_password(data.password, user["password_hash"]):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    
+    token = create_token(user["id"], user["email"])
+    user_response = UserResponse(
+        id=user["id"],
+        email=user["email"],
+        username=user["username"],
+        current_level=user.get("current_level", 1),
+        total_xp=user.get("total_xp", 0),
+        current_streak=user.get("current_streak", 0),
+        longest_streak=user.get("longest_streak", 0),
+        created_at=user["created_at"]
+    )
+    
+    return TokenResponse(access_token=token, user=user_response)
+
+@api_router.get("/auth/me", response_model=UserResponse)
+async def get_me(user: dict = Depends(get_current_user)):
+    return UserResponse(
+        id=user["id"],
+        email=user["email"],
+        username=user["username"],
+        current_level=user.get("current_level", 1),
+        total_xp=user.get("total_xp", 0),
+        current_streak=user.get("current_streak", 0),
+        longest_streak=user.get("longest_streak", 0),
+        created_at=user["created_at"]
+    )
+
+# ============ TASK ROUTES ============
+
+@api_router.get("/tasks", response_model=List[TaskResponse])
+async def get_tasks(category: Optional[str] = None, status: Optional[str] = None, user: dict = Depends(get_current_user)):
+    query = {"user_id": user["id"]}
+    if category:
+        query["category"] = category
+    if status:
+        query["status"] = status
+    
+    tasks = await db.tasks.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    return tasks
+
+@api_router.post("/tasks", response_model=TaskResponse)
+async def create_task(data: TaskCreate, user: dict = Depends(get_current_user)):
+    now = datetime.now(timezone.utc).isoformat()
+    task_id = str(uuid.uuid4())
+    
+    task_doc = {
+        "id": task_id,
+        "user_id": user["id"],
+        "title": data.title,
+        "description": data.description or "",
+        "category": data.category,
+        "priority": data.priority,
+        "status": "pending",
+        "estimated_time": data.estimated_time,
+        "actual_time": None,
+        "due_date": data.due_date,
+        "completed_at": None,
+        "tags": data.tags,
+        "created_at": now,
+        "updated_at": now
+    }
+    
+    await db.tasks.insert_one(task_doc)
+    await add_xp(user["id"], 5)  # XP for creating a task
+    
+    return TaskResponse(**task_doc)
+
+@api_router.get("/tasks/{task_id}", response_model=TaskResponse)
+async def get_task(task_id: str, user: dict = Depends(get_current_user)):
+    task = await db.tasks.find_one({"id": task_id, "user_id": user["id"]}, {"_id": 0})
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return task
+
+@api_router.put("/tasks/{task_id}", response_model=TaskResponse)
+async def update_task(task_id: str, data: TaskUpdate, user: dict = Depends(get_current_user)):
+    task = await db.tasks.find_one({"id": task_id, "user_id": user["id"]}, {"_id": 0})
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    update_data = {k: v for k, v in data.model_dump().items() if v is not None}
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    
+    await db.tasks.update_one({"id": task_id}, {"$set": update_data})
+    
+    updated_task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
+    return updated_task
+
+@api_router.patch("/tasks/{task_id}/complete", response_model=TaskResponse)
+async def complete_task(task_id: str, user: dict = Depends(get_current_user)):
+    task = await db.tasks.find_one({"id": task_id, "user_id": user["id"]}, {"_id": 0})
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    now = datetime.now(timezone.utc).isoformat()
+    
+    await db.tasks.update_one(
+        {"id": task_id},
+        {"$set": {"status": "completed", "completed_at": now, "updated_at": now}}
+    )
+    
+    # Award XP based on priority
+    xp_reward = 10 + (task.get("priority", 1) * 10)
+    await add_xp(user["id"], xp_reward)
+    
+    # Update streak and daily activity
+    await update_streak(user["id"])
+    await update_daily_activity(user["id"], "tasks_completed")
+    
+    updated_task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
+    return updated_task
+
+@api_router.delete("/tasks/{task_id}")
+async def delete_task(task_id: str, user: dict = Depends(get_current_user)):
+    result = await db.tasks.delete_one({"id": task_id, "user_id": user["id"]})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return {"message": "Task deleted"}
+
+# ============ NOTE ROUTES ============
+
+@api_router.get("/notes", response_model=List[NoteResponse])
+async def get_notes(category: Optional[str] = None, user: dict = Depends(get_current_user)):
+    query = {"user_id": user["id"]}
+    if category:
+        query["category"] = category
+    
+    notes = await db.notes.find(query, {"_id": 0}).sort("updated_at", -1).to_list(1000)
+    return notes
+
+@api_router.post("/notes", response_model=NoteResponse)
+async def create_note(data: NoteCreate, user: dict = Depends(get_current_user)):
+    now = datetime.now(timezone.utc).isoformat()
+    note_id = str(uuid.uuid4())
+    
+    note_doc = {
+        "id": note_id,
+        "user_id": user["id"],
+        "title": data.title,
+        "content": data.content,
+        "category": data.category,
+        "tags": data.tags,
+        "is_favorite": data.is_favorite,
+        "created_at": now,
+        "updated_at": now
+    }
+    
+    await db.notes.insert_one(note_doc)
+    await add_xp(user["id"], 5)
+    await update_daily_activity(user["id"], "notes_created")
+    
+    return NoteResponse(**note_doc)
+
+@api_router.get("/notes/{note_id}", response_model=NoteResponse)
+async def get_note(note_id: str, user: dict = Depends(get_current_user)):
+    note = await db.notes.find_one({"id": note_id, "user_id": user["id"]}, {"_id": 0})
+    if not note:
+        raise HTTPException(status_code=404, detail="Note not found")
+    return note
+
+@api_router.put("/notes/{note_id}", response_model=NoteResponse)
+async def update_note(note_id: str, data: NoteUpdate, user: dict = Depends(get_current_user)):
+    note = await db.notes.find_one({"id": note_id, "user_id": user["id"]}, {"_id": 0})
+    if not note:
+        raise HTTPException(status_code=404, detail="Note not found")
+    
+    update_data = {k: v for k, v in data.model_dump().items() if v is not None}
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    
+    await db.notes.update_one({"id": note_id}, {"$set": update_data})
+    
+    updated_note = await db.notes.find_one({"id": note_id}, {"_id": 0})
+    return updated_note
+
+@api_router.delete("/notes/{note_id}")
+async def delete_note(note_id: str, user: dict = Depends(get_current_user)):
+    result = await db.notes.delete_one({"id": note_id, "user_id": user["id"]})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Note not found")
+    return {"message": "Note deleted"}
+
+# ============ BUDGET ROUTES ============
+
+@api_router.get("/budget/transactions", response_model=List[TransactionResponse])
+async def get_transactions(type: Optional[str] = None, user: dict = Depends(get_current_user)):
+    query = {"user_id": user["id"]}
+    if type:
+        query["type"] = type
+    
+    transactions = await db.transactions.find(query, {"_id": 0}).sort("date", -1).to_list(1000)
+    return transactions
+
+@api_router.post("/budget/transactions", response_model=TransactionResponse)
+async def create_transaction(data: TransactionCreate, user: dict = Depends(get_current_user)):
+    now = datetime.now(timezone.utc).isoformat()
+    transaction_id = str(uuid.uuid4())
+    
+    transaction_doc = {
+        "id": transaction_id,
+        "user_id": user["id"],
+        "type": data.type,
+        "amount": data.amount,
+        "category": data.category,
+        "description": data.description or "",
+        "date": data.date,
+        "is_recurring": data.is_recurring,
+        "created_at": now
+    }
+    
+    await db.transactions.insert_one(transaction_doc)
+    
+    if data.type == "expense":
+        await update_daily_activity(user["id"], "expenses_logged")
+    
+    return TransactionResponse(**transaction_doc)
+
+@api_router.put("/budget/transactions/{transaction_id}", response_model=TransactionResponse)
+async def update_transaction(transaction_id: str, data: TransactionUpdate, user: dict = Depends(get_current_user)):
+    transaction = await db.transactions.find_one({"id": transaction_id, "user_id": user["id"]}, {"_id": 0})
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    
+    update_data = {k: v for k, v in data.model_dump().items() if v is not None}
+    
+    await db.transactions.update_one({"id": transaction_id}, {"$set": update_data})
+    
+    updated_transaction = await db.transactions.find_one({"id": transaction_id}, {"_id": 0})
+    return updated_transaction
+
+@api_router.delete("/budget/transactions/{transaction_id}")
+async def delete_transaction(transaction_id: str, user: dict = Depends(get_current_user)):
+    result = await db.transactions.delete_one({"id": transaction_id, "user_id": user["id"]})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    return {"message": "Transaction deleted"}
+
+@api_router.get("/budget/summary")
+async def get_budget_summary(user: dict = Depends(get_current_user)):
+    transactions = await db.transactions.find({"user_id": user["id"]}, {"_id": 0}).to_list(1000)
+    
+    total_income = sum(t["amount"] for t in transactions if t["type"] == "income")
+    total_expenses = sum(t["amount"] for t in transactions if t["type"] == "expense")
+    
+    # Category breakdown for expenses
+    expense_by_category = {}
+    for t in transactions:
+        if t["type"] == "expense":
+            cat = t["category"]
+            expense_by_category[cat] = expense_by_category.get(cat, 0) + t["amount"]
+    
+    # Monthly breakdown
+    monthly_data = {}
+    for t in transactions:
+        month = t["date"][:7]  # YYYY-MM
+        if month not in monthly_data:
+            monthly_data[month] = {"income": 0, "expense": 0}
+        monthly_data[month][t["type"]] += t["amount"]
+    
+    return {
+        "total_income": total_income,
+        "total_expenses": total_expenses,
+        "balance": total_income - total_expenses,
+        "expense_by_category": expense_by_category,
+        "monthly_data": monthly_data
+    }
+
+# ============ FOCUS ROUTES ============
+
+@api_router.post("/focus/start", response_model=FocusSessionResponse)
+async def start_focus_session(data: FocusSessionCreate, user: dict = Depends(get_current_user)):
+    now = datetime.now(timezone.utc).isoformat()
+    session_id = str(uuid.uuid4())
+    
+    session_doc = {
+        "id": session_id,
+        "user_id": user["id"],
+        "task_id": data.task_id,
+        "duration_planned": data.duration_planned,
+        "duration_actual": None,
+        "started_at": now,
+        "completed_at": None,
+        "interrupted": False
+    }
+    
+    await db.focus_sessions.insert_one(session_doc)
+    
+    return FocusSessionResponse(**session_doc)
+
+@api_router.patch("/focus/{session_id}/complete", response_model=FocusSessionResponse)
+async def complete_focus_session(session_id: str, data: FocusSessionComplete, user: dict = Depends(get_current_user)):
+    session = await db.focus_sessions.find_one({"id": session_id, "user_id": user["id"]}, {"_id": 0})
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    now = datetime.now(timezone.utc).isoformat()
+    
+    await db.focus_sessions.update_one(
+        {"id": session_id},
+        {"$set": {
+            "duration_actual": data.duration_actual,
+            "completed_at": now,
+            "interrupted": data.interrupted
+        }}
+    )
+    
+    # Award XP for completing focus session
+    if not data.interrupted:
+        await add_xp(user["id"], 25)
+    
+    await update_daily_activity(user["id"], "focus_time", data.duration_actual)
+    
+    updated_session = await db.focus_sessions.find_one({"id": session_id}, {"_id": 0})
+    return updated_session
+
+@api_router.get("/focus/sessions", response_model=List[FocusSessionResponse])
+async def get_focus_sessions(user: dict = Depends(get_current_user)):
+    sessions = await db.focus_sessions.find({"user_id": user["id"]}, {"_id": 0}).sort("started_at", -1).to_list(100)
+    return sessions
+
+@api_router.get("/focus/stats")
+async def get_focus_stats(user: dict = Depends(get_current_user)):
+    sessions = await db.focus_sessions.find(
+        {"user_id": user["id"], "completed_at": {"$ne": None}},
+        {"_id": 0}
+    ).to_list(1000)
+    
+    total_time = sum(s.get("duration_actual", 0) for s in sessions)
+    completed_sessions = len([s for s in sessions if not s.get("interrupted", False)])
+    total_sessions = len(sessions)
+    
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    today_sessions = [s for s in sessions if s["started_at"].startswith(today)]
+    today_time = sum(s.get("duration_actual", 0) for s in today_sessions)
+    
+    return {
+        "total_focus_time": total_time,
+        "total_sessions": total_sessions,
+        "completed_sessions": completed_sessions,
+        "completion_rate": (completed_sessions / total_sessions * 100) if total_sessions > 0 else 0,
+        "today_focus_time": today_time,
+        "today_sessions": len(today_sessions)
+    }
+
+# ============ DASHBOARD ROUTES ============
+
+@api_router.get("/dashboard/stats", response_model=DashboardStats)
+async def get_dashboard_stats(user: dict = Depends(get_current_user)):
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    week_ago = (datetime.now(timezone.utc) - timedelta(days=7)).strftime("%Y-%m-%d")
+    
+    # Tasks today
+    tasks_today = await db.tasks.find({
+        "user_id": user["id"],
+        "$or": [
+            {"due_date": {"$regex": f"^{today}"}},
+            {"category": "daily"}
+        ]
+    }, {"_id": 0}).to_list(1000)
+    
+    tasks_completed_today = len([t for t in tasks_today if t["status"] == "completed"])
+    
+    # Weekly completion rate
+    weekly_tasks = await db.tasks.find({
+        "user_id": user["id"],
+        "created_at": {"$gte": week_ago}
+    }, {"_id": 0}).to_list(1000)
+    
+    weekly_completed = len([t for t in weekly_tasks if t["status"] == "completed"])
+    weekly_rate = (weekly_completed / len(weekly_tasks) * 100) if weekly_tasks else 0
+    
+    # Focus time today
+    today_activity = await db.daily_activity.find_one({"user_id": user["id"], "date": today}, {"_id": 0})
+    focus_time_today = today_activity.get("focus_time", 0) if today_activity else 0
+    
+    # Notes count
+    notes_count = await db.notes.count_documents({"user_id": user["id"]})
+    
+    user_data = await db.users.find_one({"id": user["id"]}, {"_id": 0})
+    
+    return DashboardStats(
+        current_streak=user_data.get("current_streak", 0),
+        longest_streak=user_data.get("longest_streak", 0),
+        total_xp=user_data.get("total_xp", 0),
+        current_level=user_data.get("current_level", 1),
+        tasks_completed_today=tasks_completed_today,
+        tasks_total_today=len(tasks_today),
+        focus_time_today=focus_time_today,
+        notes_count=notes_count,
+        weekly_completion_rate=round(weekly_rate, 1)
+    )
+
+@api_router.get("/dashboard/activity", response_model=List[DailyActivityResponse])
+async def get_activity_data(days: int = 365, user: dict = Depends(get_current_user)):
+    start_date = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%d")
+    
+    activities = await db.daily_activity.find(
+        {"user_id": user["id"], "date": {"$gte": start_date}},
+        {"_id": 0}
+    ).sort("date", 1).to_list(days)
+    
+    return activities
+
+@api_router.get("/")
+async def root():
+    return {"message": "LifeOS API is running"}
+
+# ============ ACHIEVEMENTS ============
+
+ACHIEVEMENTS = [
+    {"id": "first_step", "name": "First Step", "description": "Complete your first task", "type": "task", "requirement": 1, "xp_reward": 50, "badge_icon": "check"},
+    {"id": "centurion", "name": "Centurion", "description": "Complete 100 tasks", "type": "task", "requirement": 100, "xp_reward": 500, "badge_icon": "trophy"},
+    {"id": "task_master", "name": "Task Master", "description": "Complete 1000 tasks", "type": "task", "requirement": 1000, "xp_reward": 2000, "badge_icon": "crown"},
+    {"id": "getting_warm", "name": "Getting Warm", "description": "Maintain a 3 day streak", "type": "streak", "requirement": 3, "xp_reward": 100, "badge_icon": "flame"},
+    {"id": "on_fire", "name": "On Fire", "description": "Maintain a 7 day streak", "type": "streak", "requirement": 7, "xp_reward": 250, "badge_icon": "flame"},
+    {"id": "blazing", "name": "Blazing", "description": "Maintain a 30 day streak", "type": "streak", "requirement": 30, "xp_reward": 1000, "badge_icon": "flame"},
+    {"id": "focused_mind", "name": "Focused Mind", "description": "Complete 10 focus sessions", "type": "focus", "requirement": 10, "xp_reward": 200, "badge_icon": "clock"},
+    {"id": "deep_work", "name": "Deep Work", "description": "100 hours of focus time", "type": "focus_hours", "requirement": 6000, "xp_reward": 1000, "badge_icon": "brain"},
+    {"id": "note_taker", "name": "Note Taker", "description": "Create 50 notes", "type": "notes", "requirement": 50, "xp_reward": 200, "badge_icon": "file-text"},
+]
+
+@api_router.get("/achievements", response_model=List[AchievementResponse])
+async def get_achievements(user: dict = Depends(get_current_user)):
+    # Get user stats
+    tasks_completed = await db.tasks.count_documents({"user_id": user["id"], "status": "completed"})
+    focus_sessions = await db.focus_sessions.count_documents({"user_id": user["id"], "completed_at": {"$ne": None}, "interrupted": False})
+    notes_count = await db.notes.count_documents({"user_id": user["id"]})
+    
+    user_data = await db.users.find_one({"id": user["id"]}, {"_id": 0})
+    current_streak = user_data.get("longest_streak", 0)
+    
+    # Calculate total focus hours
+    sessions = await db.focus_sessions.find({"user_id": user["id"], "completed_at": {"$ne": None}}, {"_id": 0}).to_list(1000)
+    total_focus_minutes = sum(s.get("duration_actual", 0) for s in sessions)
+    
+    # Get unlocked achievements
+    user_achievements = await db.user_achievements.find({"user_id": user["id"]}, {"_id": 0}).to_list(100)
+    unlocked_ids = {ua["achievement_id"]: ua["unlocked_at"] for ua in user_achievements}
+    
+    result = []
+    for ach in ACHIEVEMENTS:
+        unlocked = False
+        if ach["type"] == "task":
+            unlocked = tasks_completed >= ach["requirement"]
+        elif ach["type"] == "streak":
+            unlocked = current_streak >= ach["requirement"]
+        elif ach["type"] == "focus":
+            unlocked = focus_sessions >= ach["requirement"]
+        elif ach["type"] == "focus_hours":
+            unlocked = total_focus_minutes >= ach["requirement"]
+        elif ach["type"] == "notes":
+            unlocked = notes_count >= ach["requirement"]
+        
+        # Check if already in db and if not, add it
+        if unlocked and ach["id"] not in unlocked_ids:
+            now = datetime.now(timezone.utc).isoformat()
+            await db.user_achievements.insert_one({
+                "id": str(uuid.uuid4()),
+                "user_id": user["id"],
+                "achievement_id": ach["id"],
+                "unlocked_at": now
+            })
+            await add_xp(user["id"], ach["xp_reward"])
+            unlocked_ids[ach["id"]] = now
+        
+        result.append(AchievementResponse(
+            id=ach["id"],
+            name=ach["name"],
+            description=ach["description"],
+            type=ach["type"],
+            requirement=ach["requirement"],
+            xp_reward=ach["xp_reward"],
+            badge_icon=ach["badge_icon"],
+            unlocked=ach["id"] in unlocked_ids,
+            unlocked_at=unlocked_ids.get(ach["id"])
+        ))
+    
+    return result
+
+# Add middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_credentials=True,
+    allow_origins=[origin.strip() for origin in os.environ.get('CORS_ORIGINS', '*').split(',')],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Include router
+app.include_router(api_router)
+
+@app.on_event("shutdown")
+async def shutdown_db_client():
+    client.close()
