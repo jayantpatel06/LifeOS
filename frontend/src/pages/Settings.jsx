@@ -131,7 +131,7 @@ export const Settings = () => {
       <Card className="border-dashed">
         <CardContent className="p-6 text-center">
           <div className="w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-4 overflow-hidden">
-            <img src="/logo192.png" alt="LifeOS Logo" className="w-full h-full object-cover" />
+            <img src="/logo192-v2.png" alt="LifeOS Logo" className="w-full h-full object-cover" />
           </div>
           <h3 className="font-semibold text-lg">LifeOS</h3>
           <p className="text-sm text-muted-foreground mt-1">Version 1.0.0</p>

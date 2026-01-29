@@ -61,7 +61,10 @@ const EditorToolbar = ({ editor }) => {
       type="button"
       variant="ghost"
       size="icon"
-      className={`h-8 w-8 ${isActive ? 'bg-primary/20 text-primary' : ''}`}
+      className={`h-8 w-8 transition-colors ${isActive
+          ? 'bg-cyan-500/20 text-cyan-400'
+          : 'text-muted-foreground hover:text-cyan-400 hover:bg-cyan-500/10'
+        }`}
       onClick={onClick}
       title={title}
     >

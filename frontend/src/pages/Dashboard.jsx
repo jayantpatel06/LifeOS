@@ -131,7 +131,7 @@ export const Dashboard = () => {
           </p>
         </div>
         <Link to="/tasks">
-          <Button className="gap-2 bg-gradient-to-r from-violet-600 to-indigo-600" data-testid="quick-add-task-btn">
+          <Button className="gap-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white shadow-lg shadow-cyan-500/20" data-testid="quick-add-task-btn">
             <Plus className="w-4 h-4" /> Add Task
           </Button>
         </Link>
@@ -145,7 +145,7 @@ export const Dashboard = () => {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
         >
-          <Card className="border-orange-500/20 bg-gradient-to-br from-card to-orange-950/20" data-testid="streak-card">
+          <Card className="border-orange-500/40 bg-gradient-to-br from-card to-orange-950/20 shadow-lg shadow-orange-900/10" data-testid="streak-card">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
@@ -169,7 +169,7 @@ export const Dashboard = () => {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
         >
-          <Card className="border-violet-500/20 bg-gradient-to-br from-card to-violet-950/20" data-testid="xp-card">
+          <Card className="border-violet-500/40 bg-gradient-to-br from-card to-violet-950/20 shadow-lg shadow-violet-900/10" data-testid="xp-card">
             <CardContent className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <div>

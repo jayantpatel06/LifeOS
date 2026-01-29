@@ -113,9 +113,24 @@ code, .mono {
     margin: 0.83em 0;
 }
 
-.tiptap ul, .tiptap ol {
+.tiptap ul {
+    list-style-type: disc;
     padding-left: 1.5em;
     margin: 0.5em 0;
+}
+
+.tiptap ul li::marker {
+    color: hsl(190 90% 50%); /* Cyan for bullets */
+}
+
+.tiptap ol {
+    list-style-type: decimal;
+    padding-left: 1.5em;
+    margin: 0.5em 0;
+}
+
+.tiptap ol li::marker {
+    color: hsl(210 100% 60%); /* Blue for numbers */
 }
 
 .tiptap li {
@@ -273,4 +288,16 @@ code, .mono {
     [data-debug-wrapper="true"] {
         display: contents !important;
     }
+}
+
+/* Date picker icon fix for dark mode */
+::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+    cursor: pointer;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+}
+
+::-webkit-calendar-picker-indicator:hover {
+    opacity: 1;
 }

@@ -45,7 +45,7 @@ export const Sidebar = () => {
       <div className="p-6">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden shadow-lg glow-primary">
-            <img src="/logo192.png" alt="LifeOS Logo" className="w-full h-full object-cover" />
+            <img src="/logo192-v2.png" alt="LifeOS Logo" className="w-full h-full object-cover" />
           </div>
           <span className="text-xl font-bold font-['Outfit'] tracking-tight">LifeOS</span>
         </div>
@@ -83,7 +83,7 @@ export const Sidebar = () => {
 
       {/* Navigation */}
       <ScrollArea className="flex-1 px-3 py-4">
-        <nav className="space-y-1">
+        <nav className="space-y-0">
           {navItems.map((item) => (
             <NavLink
               key={item.to}

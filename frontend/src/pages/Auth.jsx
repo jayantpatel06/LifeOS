@@ -68,7 +68,7 @@ export const Auth = () => {
         >
           <div className="flex items-center gap-4 mb-8">
             <div className="w-14 h-14 rounded-2xl flex items-center justify-center shadow-xl glow-primary overflow-hidden">
-              <img src="/logo192.png" alt="LifeOS Logo" className="w-full h-full object-cover" />
+              <img src="/logo192-v2.png" alt="LifeOS Logo" className="w-full h-full object-cover" />
             </div>
             <h1 className="text-4xl font-bold font-['Outfit'] tracking-tight">LifeOS</h1>
           </div>
@@ -113,7 +113,7 @@ export const Auth = () => {
           {/* Mobile logo */}
           <div className="flex items-center gap-3 mb-8 lg:hidden">
             <div className="w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden">
-              <img src="/logo192.png" alt="LifeOS Logo" className="w-full h-full object-cover" />
+              <img src="/logo192-v2.png" alt="LifeOS Logo" className="w-full h-full object-cover" />
             </div>
             <span className="text-xl font-bold font-['Outfit']">LifeOS</span>
           </div>

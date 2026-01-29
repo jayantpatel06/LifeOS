@@ -10,10 +10,11 @@ export const AuthProvider = ({ children }) => {
   const [token, setToken] = useState(localStorage.getItem('lifeos_token'));
   const [loading, setLoading] = useState(true);
 
-  const api = axios.create({
+  // Create stable API instance
+  const [api] = useState(() => axios.create({
     baseURL: API,
     headers: token ? { Authorization: `Bearer ${token}` } : {}
-  });
+  }));
 
   // Update axios headers when token changes
   useEffect(() => {
@@ -49,33 +50,33 @@ export const AuthProvider = ({ children }) => {
     fetchUser();
   }, [fetchUser]);
 
-  const login = async (email, password) => {
+  const login = useCallback(async (email, password) => {
     const response = await axios.post(`${API}/auth/login`, { email, password });
     const { access_token, user: userData } = response.data;
     localStorage.setItem('lifeos_token', access_token);
     setToken(access_token);
     setUser(userData);
     return userData;
-  };
+  }, []);
 
-  const register = async (email, password, username) => {
+  const register = useCallback(async (email, password, username) => {
     const response = await axios.post(`${API}/auth/register`, { email, password, username });
     const { access_token, user: userData } = response.data;
     localStorage.setItem('lifeos_token', access_token);
     setToken(access_token);
     setUser(userData);
     return userData;
-  };
+  }, []);
 
-  const logout = () => {
+  const logout = useCallback(() => {
     localStorage.removeItem('lifeos_token');
     setToken(null);
     setUser(null);
-  };
+  }, []);
 
-  const refreshUser = async () => {
+  const refreshUser = useCallback(async () => {
     await fetchUser();
-  };
+  }, [fetchUser]);
 
   const value = {
     user,

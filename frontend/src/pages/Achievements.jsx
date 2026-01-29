@@ -145,19 +145,21 @@ export const Achievements = () => {
         >
           <Card className="border-amber-500/20 bg-gradient-to-br from-card to-amber-950/20" data-testid="achievements-unlocked-card">
             <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
+              <div className="flex items-center gap-4">
+                <div className="flex-shrink-0">
                   <p className="text-sm text-muted-foreground">Unlocked</p>
                   <p className="text-4xl font-bold font-mono mt-1">
                     {unlockedCount}
                     <span className="text-lg text-muted-foreground">/{achievements.length}</span>
                   </p>
                 </div>
-                <div className="w-12 h-12 rounded-2xl bg-amber-500/20 flex items-center justify-center">
+                <div className="flex-1 px-2 pt-8">
+                  <Progress value={(unlockedCount / achievements.length) * 100} className="h-3" />
+                </div>
+                <div className="w-12 h-12 rounded-2xl bg-amber-500/20 flex items-center justify-center flex-shrink-0">
                   <Trophy className="w-6 h-6 text-amber-500" />
                 </div>
               </div>
-              <Progress value={(unlockedCount / achievements.length) * 100} className="mt-4 h-2" />
             </CardContent>
           </Card>
         </motion.div>

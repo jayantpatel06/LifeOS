@@ -164,208 +164,223 @@ export const FocusTimer = () => {
         <p className="text-muted-foreground mt-1">Stay productive with the Pomodoro Technique</p>
       </div>
 
-      {/* Timer */}
-      <div className="flex justify-center">
-        <Card className={`w-full max-w-lg border-${config.color}-500/20 bg-gradient-to-br from-card to-${config.color}-950/10`} data-testid="timer-card">
-          <CardContent className="p-8">
-            {/* Mode Selector */}
-            <div className="flex justify-center gap-2 mb-8">
-              {Object.entries(TIMER_PRESETS).map(([key, preset]) => (
-                <Button
-                  key={key}
-                  variant={mode === key ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => changeMode(key)}
-                  className={mode === key ? `bg-${preset.color}-600 hover:bg-${preset.color}-700` : ''}
-                  data-testid={`mode-${key}-btn`}
-                >
-                  <preset.icon className="w-4 h-4 mr-2" />
-                  {preset.label}
-                </Button>
-              ))}
-            </div>
-
-            {/* Timer Display */}
-            <div className="relative w-64 h-64 mx-auto mb-8">
-              <svg className="w-full h-full transform -rotate-90">
-                <circle
-                  cx="128"
-                  cy="128"
-                  r="120"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="8"
-                  className="text-muted/30"
-                />
-                <motion.circle
-                  cx="128"
-                  cy="128"
-                  r="120"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="8"
-                  strokeLinecap="round"
-                  className={`text-${config.color}-500`}
-                  strokeDasharray={2 * Math.PI * 120}
-                  strokeDashoffset={2 * Math.PI * 120 * (1 - progress / 100)}
-                  initial={false}
-                  animate={{ strokeDashoffset: 2 * Math.PI * 120 * (1 - progress / 100) }}
-                  transition={{ duration: 0.5 }}
-                />
-              </svg>
-
-              <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <motion.div
-                  key={timeLeft}
-                  initial={{ scale: 1.1, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  className="text-6xl font-bold font-mono"
-                  data-testid="timer-display"
-                >
-                  {formatTime(timeLeft)}
-                </motion.div>
-                <Badge variant="outline" className={`mt-2 bg-${config.color}-500/20 text-${config.color}-400 border-${config.color}-500/30`}>
-                  <Icon className="w-3 h-3 mr-1" />
-                  {config.label}
-                </Badge>
+      <div className="flex flex-col lg:flex-row gap-6 items-start">
+        {/* Timer */}
+        <div className="w-full lg:flex-1">
+          <Card className={`w-full border-${config.color}-500/20 bg-gradient-to-br from-card to-${config.color}-950/10`} data-testid="timer-card">
+            <CardContent className="p-8">
+              {/* Mode Selector */}
+              <div className="flex justify-center gap-2 mb-8">
+                {Object.entries(TIMER_PRESETS).map(([key, preset]) => (
+                  <Button
+                    key={key}
+                    variant={mode === key ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => changeMode(key)}
+                    className={
+                      mode === key
+                        ? key === 'focus'
+                          ? 'bg-violet-600 hover:bg-violet-700'
+                          : key === 'short_break'
+                            ? 'bg-emerald-600 hover:bg-emerald-700'
+                            : 'bg-blue-600 hover:bg-blue-700'
+                        : ''
+                    }
+                    data-testid={`mode-${key}-btn`}
+                  >
+                    <preset.icon className="w-4 h-4 mr-2" />
+                    {preset.label}
+                  </Button>
+                ))}
               </div>
-            </div>
 
-            {/* Controls */}
-            <div className="flex justify-center gap-4">
-              {!isRunning ? (
+              {/* Timer Display */}
+              <div className="relative w-64 h-64 mx-auto mb-8">
+                <svg className="w-full h-full transform -rotate-90">
+                  <circle
+                    cx="128"
+                    cy="128"
+                    r="120"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="8"
+                    className="text-muted/30"
+                  />
+                  <motion.circle
+                    cx="128"
+                    cy="128"
+                    r="120"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="8"
+                    strokeLinecap="round"
+                    className={`text-${config.color}-500`}
+                    strokeDasharray={2 * Math.PI * 120}
+                    strokeDashoffset={2 * Math.PI * 120 * (1 - progress / 100)}
+                    initial={false}
+                    animate={{ strokeDashoffset: 2 * Math.PI * 120 * (1 - progress / 100) }}
+                    transition={{ duration: 0.5 }}
+                  />
+                </svg>
+
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <motion.div
+                    key={timeLeft}
+                    initial={{ scale: 1.1, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    className="text-6xl font-bold font-mono"
+                    data-testid="timer-display"
+                  >
+                    {formatTime(timeLeft)}
+                  </motion.div>
+                  <Badge variant="outline" className={`mt-2 bg-${config.color}-500/20 text-${config.color}-400 border-${config.color}-500/30`}>
+                    <Icon className="w-3 h-3 mr-1" />
+                    {config.label}
+                  </Badge>
+                </div>
+              </div>
+
+              {/* Controls */}
+              <div className="flex justify-center gap-4">
+                {!isRunning ? (
+                  <Button
+                    size="lg"
+                    onClick={startTimer}
+                    className={`gap-2 shadow-lg ${mode === 'focus'
+                      ? 'bg-gradient-to-r from-violet-600 to-violet-700 hover:from-violet-700 hover:to-violet-800'
+                      : mode === 'short_break'
+                        ? 'bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800'
+                        : 'bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800'
+                      }`}
+                    data-testid="start-btn"
+                  >
+                    <Play className="w-5 h-5" /> Start
+                  </Button>
+                ) : (
+                  <Button
+                    size="lg"
+                    onClick={pauseTimer}
+                    variant="outline"
+                    className="gap-2"
+                    data-testid="pause-btn"
+                  >
+                    <Pause className="w-5 h-5" /> Pause
+                  </Button>
+                )}
+
                 <Button
                   size="lg"
-                  onClick={startTimer}
-                  className={`gap-2 bg-gradient-to-r from-${config.color}-600 to-${config.color}-700 hover:from-${config.color}-700 hover:to-${config.color}-800 shadow-lg`}
-                  data-testid="start-btn"
-                >
-                  <Play className="w-5 h-5" /> Start
-                </Button>
-              ) : (
-                <Button
-                  size="lg"
-                  onClick={pauseTimer}
-                  variant="outline"
+                  variant="ghost"
+                  onClick={resetTimer}
                   className="gap-2"
-                  data-testid="pause-btn"
+                  data-testid="reset-btn"
                 >
-                  <Pause className="w-5 h-5" /> Pause
+                  <RotateCcw className="w-5 h-5" /> Reset
                 </Button>
+              </div>
+
+              {/* Session Info */}
+              {currentSession && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="mt-6 text-center text-sm text-muted-foreground"
+                >
+                  Session in progress...
+                </motion.div>
               )}
-
-              <Button
-                size="lg"
-                variant="ghost"
-                onClick={resetTimer}
-                className="gap-2"
-                data-testid="reset-btn"
-              >
-                <RotateCcw className="w-5 h-5" /> Reset
-              </Button>
-            </div>
-
-            {/* Session Info */}
-            {currentSession && (
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="mt-6 text-center text-sm text-muted-foreground"
-              >
-                Session in progress...
-              </motion.div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-        >
-          <Card data-testid="today-focus-stat">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Today</p>
-                  <p className="text-2xl font-bold font-mono mt-1">
-                    {Math.floor((stats?.today_focus_time || 0) / 60)}h {(stats?.today_focus_time || 0) % 60}m
-                  </p>
-                </div>
-                <div className="w-10 h-10 rounded-xl bg-violet-500/20 flex items-center justify-center">
-                  <Clock className="w-5 h-5 text-violet-500" />
-                </div>
-              </div>
             </CardContent>
           </Card>
-        </motion.div>
+        </div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-        >
-          <Card data-testid="sessions-today-stat">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Sessions Today</p>
-                  <p className="text-2xl font-bold font-mono mt-1">{stats?.today_sessions || 0}</p>
+        {/* Stats */}
+        <div className="w-full lg:w-80 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-3">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+          >
+            <Card data-testid="today-focus-stat">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Today</p>
+                    <p className="text-2xl font-bold font-mono mt-1">
+                      {Math.floor((stats?.today_focus_time || 0) / 60)}h {(stats?.today_focus_time || 0) % 60}m
+                    </p>
+                  </div>
+                  <div className="w-10 h-10 rounded-xl bg-violet-500/20 flex items-center justify-center">
+                    <Clock className="w-5 h-5 text-violet-500" />
+                  </div>
                 </div>
-                <div className="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center">
-                  <Target className="w-5 h-5 text-emerald-500" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
+              </CardContent>
+            </Card>
+          </motion.div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-        >
-          <Card data-testid="total-focus-stat">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Total Focus</p>
-                  <p className="text-2xl font-bold font-mono mt-1">
-                    {Math.floor((stats?.total_focus_time || 0) / 60)}h
-                  </p>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+          >
+            <Card data-testid="sessions-today-stat">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Sessions Today</p>
+                    <p className="text-2xl font-bold font-mono mt-1">{stats?.today_sessions || 0}</p>
+                  </div>
+                  <div className="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center">
+                    <Target className="w-5 h-5 text-emerald-500" />
+                  </div>
                 </div>
-                <div className="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center">
-                  <Brain className="w-5 h-5 text-blue-500" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
+              </CardContent>
+            </Card>
+          </motion.div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4 }}
-        >
-          <Card data-testid="completion-rate-stat">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Completion Rate</p>
-                  <p className="text-2xl font-bold font-mono mt-1">
-                    {stats?.completion_rate?.toFixed(0) || 0}%
-                  </p>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+          >
+            <Card data-testid="total-focus-stat">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Total Focus</p>
+                    <p className="text-2xl font-bold font-mono mt-1">
+                      {Math.floor((stats?.total_focus_time || 0) / 60)}h
+                    </p>
+                  </div>
+                  <div className="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center">
+                    <Brain className="w-5 h-5 text-blue-500" />
+                  </div>
                 </div>
-                <div className="w-10 h-10 rounded-xl bg-orange-500/20 flex items-center justify-center">
-                  <Zap className="w-5 h-5 text-orange-500" />
+              </CardContent>
+            </Card>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4 }}
+          >
+            <Card data-testid="completion-rate-stat">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Completion Rate</p>
+                    <p className="text-2xl font-bold font-mono mt-1">
+                      {stats?.completion_rate?.toFixed(0) || 0}%
+                    </p>
+                  </div>
+                  <div className="w-10 h-10 rounded-xl bg-orange-500/20 flex items-center justify-center">
+                    <Zap className="w-5 h-5 text-orange-500" />
+                  </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        </div>
       </div>
 
       {/* Pomodoro Technique Info */}
@@ -405,6 +420,6 @@ export const FocusTimer = () => {
           </div>
         </CardContent>
       </Card>
-    </div>
+    </div >
   );
 };

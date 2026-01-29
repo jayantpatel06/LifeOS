@@ -56,6 +56,8 @@ class UserResponse(BaseModel):
     total_xp: int = 0
     current_streak: int = 0
     longest_streak: int = 0
+    initial_balance: float = 0.0
+    is_initial_balance_set: bool = False
     created_at: str
 
 class TokenResponse(BaseModel):
@@ -129,6 +131,7 @@ class TransactionCreate(BaseModel):
     type: str  # income, expense
     amount: float
     category: str
+    section: str = "Personal"  # Personal, Salary, Other
     description: Optional[str] = ""
     date: str
     is_recurring: bool = False
@@ -137,6 +140,7 @@ class TransactionUpdate(BaseModel):
     type: Optional[str] = None
     amount: Optional[float] = None
     category: Optional[str] = None
+    section: Optional[str] = None
     description: Optional[str] = None
     date: Optional[str] = None
     is_recurring: Optional[bool] = None
@@ -148,6 +152,9 @@ class TransactionResponse(BaseModel):
     type: str
     amount: float
     category: str
+    amount: float
+    category: str
+    section: str
     description: str
     date: str
     is_recurring: bool
@@ -343,6 +350,8 @@ async def register(data: UserCreate):
         "current_streak": 0,
         "longest_streak": 0,
         "last_streak_date": "",
+        "initial_balance": 0.0,
+        "is_initial_balance_set": False,
         "created_at": now,
         "updated_at": now
     }
@@ -358,6 +367,8 @@ async def register(data: UserCreate):
         total_xp=0,
         current_streak=0,
         longest_streak=0,
+        initial_balance=0.0,
+        is_initial_balance_set=False,
         created_at=now
     )
     
@@ -378,6 +389,7 @@ async def login(data: UserLogin):
         total_xp=user.get("total_xp", 0),
         current_streak=user.get("current_streak", 0),
         longest_streak=user.get("longest_streak", 0),
+        initial_balance=user.get("initial_balance", 0.0),
         created_at=user["created_at"]
     )
     
@@ -393,7 +405,40 @@ async def get_me(user: dict = Depends(get_current_user)):
         total_xp=user.get("total_xp", 0),
         current_streak=user.get("current_streak", 0),
         longest_streak=user.get("longest_streak", 0),
+        initial_balance=user.get("initial_balance", 0.0),
         created_at=user["created_at"]
+    )
+
+class BalanceUpdate(BaseModel):
+    initial_balance: float
+
+@api_router.put("/auth/balance", response_model=UserResponse)
+async def update_balance(data: BalanceUpdate, user: dict = Depends(get_current_user)):
+    # Check if already set
+    current_user = await db.users.find_one({"id": user["id"]})
+    if current_user.get("is_initial_balance_set", False):
+        raise HTTPException(status_code=400, detail="Initial balance can only be set once")
+
+    await db.users.update_one(
+        {"id": user["id"]},
+        {"$set": {
+            "initial_balance": data.initial_balance, 
+            "is_initial_balance_set": True
+        }}
+    )
+    
+    updated_user = await db.users.find_one({"id": user["id"]}, {"_id": 0})
+    return UserResponse(
+        id=updated_user["id"],
+        email=updated_user["email"],
+        username=updated_user["username"],
+        current_level=updated_user.get("current_level", 1),
+        total_xp=updated_user.get("total_xp", 0),
+        current_streak=updated_user.get("current_streak", 0),
+        longest_streak=updated_user.get("longest_streak", 0),
+        initial_balance=updated_user.get("initial_balance", 0.0),
+        is_initial_balance_set=updated_user.get("is_initial_balance_set", True),
+        created_at=updated_user["created_at"]
     )
 
 # ============ TASK ROUTES ============
@@ -558,7 +603,7 @@ async def get_transactions(type: Optional[str] = None, user: dict = Depends(get_
     if type:
         query["type"] = type
     
-    transactions = await db.transactions.find(query, {"_id": 0}).sort("date", -1).to_list(1000)
+    transactions = await db.transactions.find(query, {"_id": 0}).sort([("date", -1), ("created_at", -1)]).to_list(1000)
     return transactions
 
 @api_router.post("/budget/transactions", response_model=TransactionResponse)
@@ -572,6 +617,7 @@ async def create_transaction(data: TransactionCreate, user: dict = Depends(get_c
         "type": data.type,
         "amount": data.amount,
         "category": data.category,
+        "section": data.section,
         "description": data.description or "",
         "date": data.date,
         "is_recurring": data.is_recurring,
@@ -627,10 +673,14 @@ async def get_budget_summary(user: dict = Depends(get_current_user)):
             monthly_data[month] = {"income": 0, "expense": 0}
         monthly_data[month][t["type"]] += t["amount"]
     
+    initial_balance = user.get("initial_balance", 0.0)
+    
     return {
         "total_income": total_income,
         "total_expenses": total_expenses,
-        "balance": total_income - total_expenses,
+        "initial_balance": initial_balance,
+        "is_initial_balance_set": user.get("is_initial_balance_set", False),
+        "balance": initial_balance + total_income - total_expenses,
         "expense_by_category": expense_by_category,
         "monthly_data": monthly_data
     }
