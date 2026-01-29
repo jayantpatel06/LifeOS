@@ -14,7 +14,7 @@ import { toast } from 'sonner';
 import {
   Plus, TrendingUp, TrendingDown, Wallet, DollarSign, MoreVertical, Trash2, Edit,
   ShoppingCart, Car, Utensils, Home, Heart, GraduationCap, Film, Briefcase, PiggyBank,
-  CreditCard, ArrowUpRight, ArrowDownRight
+  CreditCard, ArrowUpRight, ArrowDownRight, Filter
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
@@ -60,9 +60,10 @@ export const Budget = () => {
   // Form state
   const [type, setType] = useState('expense');
   const [amount, setAmount] = useState('');
-  const [category, setCategory] = useState('food');
+  const [category, setCategory] = useState('other');
   const [section, setSection] = useState('Personal');
   const [activeSection, setActiveSection] = useState('Personal');
+  const [filterType, setFilterType] = useState('all');
   const [description, setDescription] = useState('');
   const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
 
@@ -91,12 +92,13 @@ export const Budget = () => {
   const resetForm = () => {
     setType('expense');
     setAmount('');
-    setCategory('food');
+    setCategory('other');
     setSection('Personal');
     setDescription('');
     setDate(format(new Date(), 'yyyy-MM-dd'));
     setEditingTransaction(null);
   };
+
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -161,26 +163,34 @@ export const Budget = () => {
   };
 
 
+  const formatCurrency = (amount) => {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(amount);
+  };
 
   const TransactionCard = ({ transaction }) => {
     const config = getCategoryConfig(transaction.type, transaction.category);
     const Icon = config.icon;
+    const isIncome = transaction.type === 'income';
 
     return (
-      <div className="group flex items-center justify-between p-3 mb-2 rounded-lg bg-card/50 border border-border/50 hover:border-primary/30 transition-all">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: `${config.color}20` }}>
+      <div className={`group flex items-center gap-3 p-3 mb-2 rounded-lg bg-card/50 border border-border/50 hover:border-primary/30 transition-all ${isIncome ? 'flex-row-reverse text-right' : ''}`}>
+        <div className={`flex items-center gap-3 ${isIncome ? 'flex-row-reverse' : ''}`}>
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: `${config.color}20` }}>
             <Icon className="w-4 h-4" style={{ color: config.color }} />
           </div>
           <div>
-            <p className="font-medium text-sm">{config.label}</p>
-            {transaction.description && <p className="text-xs text-muted-foreground">{transaction.description}</p>}
+            <p className="font-medium text-sm">{transaction.description || '__'}</p>
             <p className="text-[10px] text-muted-foreground mt-0.5">{format(new Date(transaction.date), 'MMM d, yyyy')}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <p className={`font-bold font-mono text-sm ${transaction.type === 'income' ? 'text-emerald-500' : 'text-red-500'}`}>
-            {transaction.type === 'income' ? '+' : '-'}{transaction.amount.toFixed(2)}
+        <div className={`flex items-center gap-2 ${isIncome ? 'flex-row-reverse' : ''}`}>
+          <p className={`font-bold font-mono text-sm ${isIncome ? 'text-emerald-500' : 'text-red-500'}`}>
+            {isIncome ? '+' : '-'}{formatCurrency(transaction.amount).replace('₹', '')}
           </p>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -188,7 +198,7 @@ export const Budget = () => {
                 <MoreVertical className="w-3 h-3" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
+            <DropdownMenuContent align={isIncome ? "start" : "end"}>
               <DropdownMenuItem onClick={() => handleEdit(transaction)}><Edit className="w-3 h-3 mr-2" /> Edit</DropdownMenuItem>
               <DropdownMenuItem onClick={() => handleDelete(transaction.id)} className="text-destructive"><Trash2 className="w-3 h-3 mr-2" /> Delete</DropdownMenuItem>
             </DropdownMenuContent>
@@ -197,6 +207,7 @@ export const Budget = () => {
       </div>
     );
   };
+
 
   if (loading) {
     return (
@@ -235,10 +246,10 @@ export const Budget = () => {
               </DialogHeader>
               <form onSubmit={handleSubmit} className="space-y-4 mt-4">
                 <div className="flex gap-2">
-                  <Button type="button" variant={type === 'expense' ? 'default' : 'outline'} className={type === 'expense' ? 'bg-red-600 hover:bg-red-700' : ''} onClick={() => { setType('expense'); setCategory('food'); }}>
+                  <Button type="button" variant={type === 'expense' ? 'default' : 'outline'} className={type === 'expense' ? 'bg-red-600 hover:bg-red-700' : ''} onClick={() => { setType('expense'); setCategory('other'); }}>
                     <ArrowDownRight className="w-4 h-4 mr-2" /> Expense
                   </Button>
-                  <Button type="button" variant={type === 'income' ? 'default' : 'outline'} className={type === 'income' ? 'bg-emerald-600 hover:bg-emerald-700' : ''} onClick={() => { setType('income'); setCategory('salary'); }}>
+                  <Button type="button" variant={type === 'income' ? 'default' : 'outline'} className={type === 'income' ? 'bg-emerald-600 hover:bg-emerald-700' : ''} onClick={() => { setType('income'); setCategory('other'); }}>
                     <ArrowUpRight className="w-4 h-4 mr-2" /> Income
                   </Button>
                 </div>
@@ -256,8 +267,8 @@ export const Budget = () => {
                 <div className="space-y-2">
                   <Label>Amount</Label>
                   <div className="relative">
-                    <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-cyan-400" />
-                    <Input type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" className="pl-10" required />
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-cyan-400 text-sm">{formatCurrency(0).charAt(0)}</span>
+                    <Input type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder={formatCurrency(0).replace('₹', '')} className="pl-10" required />
                   </div>
                 </div>
 
@@ -300,13 +311,13 @@ export const Budget = () => {
               <Card className="border-emerald-500/20 bg-gradient-to-br from-card to-emerald-950/20">
                 <CardContent className="p-6">
                   <p className="text-sm text-muted-foreground">Total Income</p>
-                  <p className="text-2xl font-bold font-mono text-emerald-500 mt-1">{summary?.total_income?.toFixed(2)}</p>
+                  <p className="text-2xl font-bold font-mono text-emerald-500 mt-1">{formatCurrency(summary?.total_income || 0)}</p>
                 </CardContent>
               </Card>
               <Card className="border-red-500/20 bg-gradient-to-br from-card to-red-950/20">
                 <CardContent className="p-6">
                   <p className="text-sm text-muted-foreground">Total Expenses</p>
-                  <p className="text-2xl font-bold font-mono text-red-500 mt-1">{summary?.total_expenses?.toFixed(2)}</p>
+                  <p className="text-2xl font-bold font-mono text-red-500 mt-1">{formatCurrency(summary?.total_expenses || 0)}</p>
                 </CardContent>
               </Card>
               <Card className="border-violet-500/20 bg-gradient-to-br from-card to-violet-950/20">
@@ -314,8 +325,8 @@ export const Budget = () => {
                   <div className="flex justify-between items-start">
                     <div>
                       <p className="text-sm text-muted-foreground">Current Balance</p>
-                      <p className="text-2xl font-bold font-mono text-violet-500 mt-1">{summary?.balance?.toFixed(2)}</p>
-                      <p className="text-xs text-muted-foreground mt-1">Initial: {summary?.initial_balance?.toFixed(2)}</p>
+                      <p className="text-2xl font-bold font-mono text-violet-500 mt-1">{formatCurrency(summary?.balance || 0)}</p>
+                      <p className="text-xs text-muted-foreground mt-1">Initial: {formatCurrency(summary?.initial_balance || 0)}</p>
                     </div>
                     {/* Only show edit button if initial balance hasn't been set yet (or user just registered and it's 0/unset) 
                         Note: Backend now enforces one-time set. We check the flag from user object or summary if available 
@@ -328,7 +339,7 @@ export const Budget = () => {
                         <DialogContent>
                           <DialogHeader><DialogTitle>Set Initial Balance</DialogTitle></DialogHeader>
                           <form onSubmit={handleUpdateBalance} className="space-y-4">
-                            <Input type="number" step="0.01" value={newBalance} onChange={(e) => setNewBalance(e.target.value)} placeholder="0.00" />
+                            <Input type="number" step="0.01" value={newBalance} onChange={(e) => setNewBalance(e.target.value)} placeholder={formatCurrency(0).replace('₹', '')} />
                             <Button type="submit" className="w-full">Update (Once Only)</Button>
                           </form>
                         </DialogContent>
@@ -371,41 +382,46 @@ export const Budget = () => {
                 </Button>
               ))}
             </div>
-            <div className={`px-2 py-1 rounded text-s font-mono font-bold ${(transactions.filter(t => (t.section || 'Personal') === activeSection).reduce((acc, t) => acc + (t.type === 'income' ? t.amount : -t.amount), 0)) >= 0
-              ? 'bg-emerald-500/10 text-emerald-500'
-              : 'bg-red-500/10 text-red-500'
-              }`}>
-              Balance: {(transactions.filter(t => (t.section || 'Personal') === activeSection).reduce((acc, t) => acc + (t.type === 'income' ? t.amount : -t.amount), 0)).toFixed(2)}
+
+            <div className="flex items-center gap-3">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
+                    <Filter className="w-4 h-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => setFilterType('all')} className={filterType === 'all' ? 'bg-accent' : ''}>All</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setFilterType('income')} className={filterType === 'income' ? 'bg-accent' : ''}>Income</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setFilterType('expense')} className={filterType === 'expense' ? 'bg-accent' : ''}>Expense</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <div className={`px-2 py-1 rounded text-sm font-mono font-bold ${(transactions.filter(t => (t.section || 'Personal') === activeSection).reduce((acc, t) => acc + (t.type === 'income' ? t.amount : -t.amount), 0)) >= 0
+                ? 'bg-emerald-500/10 text-emerald-500'
+                : 'bg-red-500/10 text-red-500'
+                }`}>
+                Balance: {formatCurrency(transactions.filter(t => (t.section || 'Personal') === activeSection).reduce((acc, t) => acc + (t.type === 'income' ? t.amount : -t.amount), 0))}
+              </div>
             </div>
           </div>
-          <CardContent className="p-0">
-            <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-border/50">
-              {/* Expenses (Left) */}
-              <div className="p-4">
-                <h4 className="text-sm font-semibold text-red-400 mb-4 flex items-center gap-2 bg-red-500/10 w-fit px-3 py-1 rounded-full"><ArrowDownRight className="w-4 h-4" /> Expenses</h4>
-                <div className="space-y-2">
-                  {transactions.filter(t => (t.section || 'Personal') === activeSection && t.type === 'expense').length > 0 ? (
-                    transactions.filter(t => (t.section || 'Personal') === activeSection && t.type === 'expense').map(t => <TransactionCard key={t.id} transaction={t} />)
-                  ) : (
-                    <div className="text-center py-8 text-muted-foreground/50 border-2 border-dashed border-border/50 rounded-xl">
-                      <p className="text-sm">No expenses in {activeSection}</p>
-                    </div>
-                  )}
+          <CardContent className="p-4">
+            <div className="space-y-2">
+              {transactions
+                .filter(t => (t.section || 'Personal') === activeSection)
+                .filter(t => filterType === 'all' ? true : t.type === filterType)
+                .sort((a, b) => new Date(b.date) - new Date(a.date) || new Date(b.created_at || 0) - new Date(a.created_at || 0))
+                .length > 0 ? (
+                transactions
+                  .filter(t => (t.section || 'Personal') === activeSection)
+                  .filter(t => filterType === 'all' ? true : t.type === filterType)
+                  .sort((a, b) => new Date(b.date) - new Date(a.date) || new Date(b.created_at || 0) - new Date(a.created_at || 0))
+                  .map(t => <TransactionCard key={t.id} transaction={t} />)
+              ) : (
+                <div className="text-center py-12 text-muted-foreground/50 border-2 border-dashed border-border/50 rounded-xl">
+                  <p className="text-sm">No {filterType !== 'all' ? filterType : ''} transactions in {activeSection}</p>
                 </div>
-              </div>
-              {/* Income (Right) */}
-              <div className="p-4">
-                <h4 className="text-sm font-semibold text-emerald-400 mb-4 flex items-center gap-2 bg-emerald-500/10 w-fit px-3 py-1 rounded-full"><ArrowUpRight className="w-4 h-4" /> Income</h4>
-                <div className="space-y-2">
-                  {transactions.filter(t => (t.section || 'Personal') === activeSection && t.type === 'income').length > 0 ? (
-                    transactions.filter(t => (t.section || 'Personal') === activeSection && t.type === 'income').map(t => <TransactionCard key={t.id} transaction={t} />)
-                  ) : (
-                    <div className="text-center py-8 text-muted-foreground/50 border-2 border-dashed border-border/50 rounded-xl">
-                      <p className="text-sm">No income in {activeSection}</p>
-                    </div>
-                  )}
-                </div>
-              </div>
+              )}
             </div>
           </CardContent>
         </Card>
