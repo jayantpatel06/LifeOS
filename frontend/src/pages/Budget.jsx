@@ -66,6 +66,7 @@ export const Budget = () => {
   const [filterType, setFilterType] = useState('all');
   const [description, setDescription] = useState('');
   const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [transactionToDelete, setTransactionToDelete] = useState(null);
 
   const SECTIONS = ['Personal', 'Salary', 'Other'];
 
@@ -178,31 +179,42 @@ export const Budget = () => {
     const isIncome = transaction.type === 'income';
 
     return (
-      <div className={`group flex items-center gap-3 p-3 mb-2 rounded-lg bg-card/50 border border-border/50 hover:border-primary/30 transition-all ${isIncome ? 'flex-row-reverse text-right' : ''}`}>
-        <div className={`flex items-center gap-3 ${isIncome ? 'flex-row-reverse' : ''}`}>
+      <div className="group relative flex items-center gap-3 p-3 mb-2 rounded-lg bg-card/50 border border-border/50 hover:border-primary/30 transition-all overflow-hidden">
+        {/* Left Side Actions (Visible on Hover) */}
+        <div className="absolute left-0 top-0 bottom-0 flex items-center gap-1 px-2 bg-gradient-to-r from-card via-card/95 to-transparent opacity-0 group-hover:opacity-100 transition-all z-10 translate-x-[-100%] group-hover:translate-x-0">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-primary hover:bg-primary/10"
+            onClick={() => handleEdit(transaction)}
+          >
+            <Edit className="w-3.5 h-3.5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-destructive hover:bg-destructive/10"
+            onClick={() => setTransactionToDelete(transaction)}
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </Button>
+        </div>
+
+        {/* Regular Content */}
+        <div className="flex items-center gap-3 flex-1 group-hover:pl-16 transition-all duration-300">
           <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: `${config.color}20` }}>
             <Icon className="w-4 h-4" style={{ color: config.color }} />
           </div>
-          <div>
-            <p className="font-medium text-sm">{transaction.description || '__'}</p>
+          <div className="overflow-hidden">
+            <p className="font-medium text-sm truncate">{transaction.description || '__'}</p>
             <p className="text-[10px] text-muted-foreground mt-0.5">{format(new Date(transaction.date), 'MMM d, yyyy')}</p>
           </div>
         </div>
-        <div className={`flex items-center gap-2 ${isIncome ? 'flex-row-reverse' : ''}`}>
+        <div className="text-right">
           <p className={`font-bold font-mono text-sm ${isIncome ? 'text-emerald-500' : 'text-red-500'}`}>
             {isIncome ? '+' : '-'}{formatCurrency(transaction.amount).replace('₹', '')}
           </p>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity">
-                <MoreVertical className="w-3 h-3" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align={isIncome ? "start" : "end"}>
-              <DropdownMenuItem onClick={() => handleEdit(transaction)}><Edit className="w-3 h-3 mr-2" /> Edit</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleDelete(transaction.id)} className="text-destructive"><Trash2 className="w-3 h-3 mr-2" /> Delete</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <p className="text-[10px] text-muted-foreground uppercase tracking-tight opacity-50">{transaction.category}</p>
         </div>
       </div>
     );
@@ -426,6 +438,31 @@ export const Budget = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={!!transactionToDelete} onOpenChange={(open) => !open && setTransactionToDelete(null)}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>Confirm Delete</DialogTitle>
+            <CardDescription className="pt-2">
+              Are you sure you want to delete this {transactionToDelete?.type} of {transactionToDelete && formatCurrency(transactionToDelete.amount)}? This action cannot be undone.
+            </CardDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-3 pt-4">
+            <Button variant="outline" onClick={() => setTransactionToDelete(null)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                handleDelete(transactionToDelete.id);
+                setTransactionToDelete(null);
+              }}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Delete Transaction
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

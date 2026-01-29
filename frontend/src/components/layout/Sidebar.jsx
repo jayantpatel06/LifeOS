@@ -16,9 +16,16 @@ import {
   Flame,
   Zap,
   Menu,
-  X
+  X,
+  ChevronRight
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "../ui/tooltip";
 
 const navItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
@@ -33,109 +40,192 @@ export const Sidebar = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(false);
+
+  // Load collapse state from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem('sidebar-collapsed');
+    if (saved !== null) setIsCollapsed(JSON.parse(saved));
+  }, []);
+
+  const toggleCollapse = () => {
+    const newState = !isCollapsed;
+    setIsCollapsed(newState);
+    localStorage.setItem('sidebar-collapsed', JSON.stringify(newState));
+  };
 
   const handleLogout = () => {
     logout();
     navigate('/');
   };
 
+  const NavItem = ({ item }) => {
+    const content = (
+      <NavLink
+        to={item.to}
+        onClick={() => setMobileOpen(false)}
+        className={({ isActive }) =>
+          cn(
+            "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200",
+            isActive
+              ? "bg-primary/10 text-primary border border-primary/20 shadow-lg glow-primary"
+              : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
+            isCollapsed && !mobileOpen ? "justify-center px-0 w-12 mx-auto" : ""
+          )
+        }
+        data-testid={`nav-${item.label.toLowerCase().replace(' ', '-')}`}
+      >
+        <item.icon className="w-5 h-5 shrink-0" />
+        {(!isCollapsed || mobileOpen) && <span>{item.label}</span>}
+      </NavLink>
+    );
+
+    if (isCollapsed && !mobileOpen) {
+      return (
+        <Tooltip delayDuration={0}>
+          <TooltipTrigger asChild>
+            {content}
+          </TooltipTrigger>
+          <TooltipContent side="right">
+            {item.label}
+          </TooltipContent>
+        </Tooltip>
+      );
+    }
+
+    return content;
+  };
+
   const NavContent = () => (
-    <>
-      {/* Logo */}
-      <div className="p-6">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden shadow-lg glow-primary">
+    <TooltipProvider>
+      {/* Logo Area */}
+      <div className={cn(
+        "p-6 flex items-center transition-all duration-300",
+        (isCollapsed && !mobileOpen) ? "justify-center px-0" : "px-6 justify-start"
+      )}>
+        <button
+          onClick={toggleCollapse}
+          className="flex items-center gap-3 overflow-hidden group/logo"
+          title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+        >
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden shadow-lg glow-primary shrink-0 ">
             <img src="/logo192-v2.png" alt="LifeOS Logo" className="w-full h-full object-cover" />
           </div>
-          <span className="text-xl font-bold font-['Outfit'] tracking-tight">LifeOS</span>
-        </div>
+          {(!isCollapsed || mobileOpen) && (
+            <span className="text-xl font-bold font-['Outfit'] tracking-tight whitespace-nowrap animate-in fade-in slide-in-from-left-2 duration-300 group-hover/logo:text-primary transition-colors">LifeOS</span>
+          )}
+        </button>
       </div>
 
       {/* User Stats */}
-      <div className="px-4 mb-4">
-        <div className="p-4 rounded-xl bg-gradient-to-br from-card to-muted/50 border border-border/50">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-white font-semibold">
+      <div className={cn("px-4 mb-4 transition-all duration-300", (isCollapsed && !mobileOpen) ? "px-2" : "px-4")}>
+        <div className={cn(
+          "p-4 rounded-xl bg-gradient-to-br from-card to-muted/50 border border-border/50 transition-all duration-100 overflow-hidden",
+          (isCollapsed && !mobileOpen) ? "p-2 items-center flex flex-col" : ""
+        )}>
+          <div className={cn("flex items-center gap-3 mb-3 w-full", (isCollapsed && !mobileOpen) ? "flex-col mb-0" : "")}>
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-white font-semibold shrink-0 cursor-pointer hover:ring-2 ring-primary/50 transition-all">
               {user?.username?.charAt(0).toUpperCase()}
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="font-medium truncate">{user?.username}</p>
-              <p className="text-xs text-muted-foreground">Level {user?.current_level || 1}</p>
-            </div>
+            {(!isCollapsed || mobileOpen) && (
+              <div className="flex-1 min-w-0 animate-in fade-in slide-in-from-left-2">
+                <p className="font-medium truncate">{user?.username}</p>
+                <p className="text-xs text-muted-foreground">Level {user?.current_level || 1}</p>
+              </div>
+            )}
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="flex items-center gap-2 text-sm">
-              <Flame className={cn("w-4 h-4 text-orange-500", user?.current_streak > 0 && "animate-fire")} />
-              <span className="font-mono">{user?.current_streak || 0}</span>
-              <span className="text-muted-foreground text-xs">streak</span>
+          {(!isCollapsed || mobileOpen) && (
+            <div className="grid grid-cols-2 gap-3 mt-3 animate-in fade-in slide-in-from-bottom-2">
+              <div className="flex items-center gap-2 text-sm">
+                <Flame className={cn("w-4 h-4 text-orange-500", user?.current_streak > 0 && "animate-fire")} />
+                <span className="font-mono">{user?.current_streak || 0}</span>
+                <span className="text-muted-foreground text-xs">streak</span>
+              </div>
+              <div className="flex items-center gap-2 text-sm">
+                <Zap className="w-4 h-4 text-violet-500" />
+                <span className="font-mono">{user?.total_xp || 0}</span>
+                <span className="text-muted-foreground text-xs">XP</span>
+              </div>
             </div>
-            <div className="flex items-center gap-2 text-sm">
-              <Zap className="w-4 h-4 text-violet-500" />
-              <span className="font-mono">{user?.total_xp || 0}</span>
-              <span className="text-muted-foreground text-xs">XP</span>
-            </div>
-          </div>
+          )}
         </div>
       </div>
 
-      <Separator className="mx-4 w-auto" />
+      <Separator className={cn("mx-4 w-auto", (isCollapsed && !mobileOpen) ? "mx-2" : "mx-4")} />
 
       {/* Navigation */}
-      <ScrollArea className="flex-1 px-3 py-4">
-        <nav className="space-y-0">
+      <ScrollArea className="flex-1 px-4 py-3">
+        <nav className={cn("space-y-1 flex flex-col", (isCollapsed && !mobileOpen) ? "items-center" : "items-stretch")}>
           {navItems.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              onClick={() => setMobileOpen(false)}
-              className={({ isActive }) =>
-                cn(
-                  "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200",
-                  isActive
-                    ? "bg-primary/10 text-primary border border-primary/20 shadow-lg glow-primary"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                )
-              }
-              data-testid={`nav-${item.label.toLowerCase().replace(' ', '-')}`}
-            >
-              <item.icon className="w-5 h-5" />
-              {item.label}
-            </NavLink>
+            <NavItem key={item.to} item={item} />
           ))}
         </nav>
       </ScrollArea>
 
       {/* Bottom Actions */}
-      <div className="p-4 space-y-2">
-        <NavLink
-          to="/settings"
-          onClick={() => setMobileOpen(false)}
-          className={({ isActive }) =>
-            cn(
-              "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200",
-              isActive
-                ? "bg-primary/10 text-primary"
-                : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
-            )
-          }
-          data-testid="nav-settings"
-        >
-          <Settings className="w-5 h-5" />
-          Settings
-        </NavLink>
+      <div className={cn("p-4 space-y-2", (isCollapsed && !mobileOpen) ? "px-0 pb-6 flex flex-col items-center" : "p-4")}>
+        {/* Settings */}
+        {isCollapsed && !mobileOpen ? (
+          <Tooltip delayDuration={0}>
+            <TooltipTrigger asChild>
+              <NavLink
+                to="/settings"
+                className={({ isActive }) =>
+                  cn(
+                    "flex items-center justify-center w-12 h-12 rounded-xl text-sm font-medium transition-all duration-200 mx-auto",
+                    isActive ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                  )
+                }
+              >
+                <Settings className="w-5 h-5" />
+              </NavLink>
+            </TooltipTrigger>
+            <TooltipContent side="right">Settings</TooltipContent>
+          </Tooltip>
+        ) : (
+          <NavLink
+            to="/settings"
+            onClick={() => setMobileOpen(false)}
+            className={({ isActive }) =>
+              cn(
+                "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200",
+                isActive ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+              )
+            }
+          >
+            <Settings className="w-5 h-5" />
+            Settings
+          </NavLink>
+        )}
 
-        <Button
-          variant="ghost"
-          className="w-full justify-start gap-3 px-4 py-3 h-auto text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-          onClick={handleLogout}
-          data-testid="logout-btn"
-        >
-          <LogOut className="w-5 h-5" />
-          Logout
-        </Button>
+        {/* Logout */}
+        {isCollapsed && !mobileOpen ? (
+          <Tooltip delayDuration={0}>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="w-12 h-12 rounded-xl text-muted-foreground hover:text-destructive hover:bg-destructive/10 mx-auto"
+                onClick={handleLogout}
+              >
+                <LogOut className="w-5 h-5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right">Logout</TooltipContent>
+          </Tooltip>
+        ) : (
+          <Button
+            variant="ghost"
+            className="w-full justify-start gap-3 px-4 py-3 h-auto text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+            onClick={handleLogout}
+          >
+            <LogOut className="w-5 h-5" />
+            Logout
+          </Button>
+        )}
       </div>
-    </>
+    </TooltipProvider>
   );
 
   return (
@@ -162,7 +252,8 @@ export const Sidebar = () => {
       {/* Sidebar */}
       <aside
         className={cn(
-          "fixed md:sticky top-0 left-0 z-40 h-screen w-64 bg-card/95 backdrop-blur-xl border-r border-border/50 flex flex-col transition-transform duration-300",
+          "fixed md:sticky top-0 left-0 z-40 h-screen transition-all duration-300 ease-in-out bg-card/95 backdrop-blur-xl border-r border-border/50 flex flex-col",
+          (isCollapsed && !mobileOpen) ? "w-20" : "w-64",
           mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
         )}
       >
