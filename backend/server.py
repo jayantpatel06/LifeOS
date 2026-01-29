@@ -58,12 +58,14 @@ class UserResponse(BaseModel):
     longest_streak: int = 0
     initial_balance: float = 0.0
     is_initial_balance_set: bool = False
+    custom_note_labels: List[str] = []
     created_at: str
 
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserResponse
+
 
 class TaskCreate(BaseModel):
     title: str
@@ -104,15 +106,13 @@ class TaskResponse(BaseModel):
 class NoteCreate(BaseModel):
     title: str
     content: str = ""
-    category: str = "general"  # study, budget, general, quick
-    tags: List[str] = []
+    categories: List[str] = ["general"]  # study, budget, general, quick
     is_favorite: bool = False
 
 class NoteUpdate(BaseModel):
     title: Optional[str] = None
     content: Optional[str] = None
-    category: Optional[str] = None
-    tags: Optional[List[str]] = None
+    categories: Optional[List[str]] = None
     is_favorite: Optional[bool] = None
 
 class NoteResponse(BaseModel):
@@ -121,8 +121,8 @@ class NoteResponse(BaseModel):
     user_id: str
     title: str
     content: str
-    category: str
-    tags: List[str]
+    categories: List[str] = ["general"]
+    tags: List[str] = []
     is_favorite: bool
     created_at: str
     updated_at: str
@@ -150,8 +150,6 @@ class TransactionResponse(BaseModel):
     id: str
     user_id: str
     type: str
-    amount: float
-    category: str
     amount: float
     category: str
     section: str
@@ -329,7 +327,8 @@ async def update_daily_activity(user_id: str, field: str, increment: int = 1):
 
 @api_router.post("/auth/register", response_model=TokenResponse)
 async def register(data: UserCreate):
-    existing = await db.users.find_one({"email": data.email}, {"_id": 0})
+    email = data.email.lower()
+    existing = await db.users.find_one({"email": email}, {"_id": 0})
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
     
@@ -342,7 +341,7 @@ async def register(data: UserCreate):
     
     user_doc = {
         "id": user_id,
-        "email": data.email,
+        "email": email,
         "username": data.username,
         "password_hash": hash_password(data.password),
         "current_level": 1,
@@ -358,10 +357,10 @@ async def register(data: UserCreate):
     
     await db.users.insert_one(user_doc)
     
-    token = create_token(user_id, data.email)
+    token = create_token(user_id, email)
     user_response = UserResponse(
         id=user_id,
-        email=data.email,
+        email=email,
         username=data.username,
         current_level=1,
         total_xp=0,
@@ -369,6 +368,7 @@ async def register(data: UserCreate):
         longest_streak=0,
         initial_balance=0.0,
         is_initial_balance_set=False,
+        custom_note_labels=[],
         created_at=now
     )
     
@@ -376,7 +376,8 @@ async def register(data: UserCreate):
 
 @api_router.post("/auth/login", response_model=TokenResponse)
 async def login(data: UserLogin):
-    user = await db.users.find_one({"email": data.email}, {"_id": 0})
+    email = data.email.lower()
+    user = await db.users.find_one({"email": email}, {"_id": 0})
     if not user or not verify_password(data.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
@@ -390,6 +391,7 @@ async def login(data: UserLogin):
         current_streak=user.get("current_streak", 0),
         longest_streak=user.get("longest_streak", 0),
         initial_balance=user.get("initial_balance", 0.0),
+        custom_note_labels=user.get("custom_note_labels", []),
         created_at=user["created_at"]
     )
     
@@ -406,7 +408,33 @@ async def get_me(user: dict = Depends(get_current_user)):
         current_streak=user.get("current_streak", 0),
         longest_streak=user.get("longest_streak", 0),
         initial_balance=user.get("initial_balance", 0.0),
+        custom_note_labels=user.get("custom_note_labels", []),
         created_at=user["created_at"]
+    )
+
+class LabelUpdate(BaseModel):
+    labels: List[str]
+
+@api_router.put("/auth/labels", response_model=UserResponse)
+async def update_labels(data: LabelUpdate, user: dict = Depends(get_current_user)):
+    await db.users.update_one(
+        {"id": user["id"]},
+        {"$set": {"custom_note_labels": data.labels}}
+    )
+    
+    updated_user = await db.users.find_one({"id": user["id"]}, {"_id": 0})
+    return UserResponse(
+        id=updated_user["id"],
+        email=updated_user["email"],
+        username=updated_user["username"],
+        current_level=updated_user.get("current_level", 1),
+        total_xp=updated_user.get("total_xp", 0),
+        current_streak=updated_user.get("current_streak", 0),
+        longest_streak=updated_user.get("longest_streak", 0),
+        initial_balance=updated_user.get("initial_balance", 0.0),
+        is_initial_balance_set=updated_user.get("is_initial_balance_set", False),
+        custom_note_labels=updated_user.get("custom_note_labels", []),
+        created_at=updated_user["created_at"]
     )
 
 class BalanceUpdate(BaseModel):
@@ -542,6 +570,10 @@ async def get_notes(category: Optional[str] = None, user: dict = Depends(get_cur
         query["category"] = category
     
     notes = await db.notes.find(query, {"_id": 0}).sort("updated_at", -1).to_list(1000)
+    # Handle legacy data and field rename
+    for n in notes:
+        if "categories" not in n:
+            n["categories"] = [n.pop("category", "general")] if isinstance(n.get("category"), str) else n.get("category", ["general"])
     return notes
 
 @api_router.post("/notes", response_model=NoteResponse)
@@ -554,8 +586,7 @@ async def create_note(data: NoteCreate, user: dict = Depends(get_current_user)):
         "user_id": user["id"],
         "title": data.title,
         "content": data.content,
-        "category": data.category,
-        "tags": data.tags,
+        "categories": data.categories,
         "is_favorite": data.is_favorite,
         "created_at": now,
         "updated_at": now
@@ -572,6 +603,8 @@ async def get_note(note_id: str, user: dict = Depends(get_current_user)):
     note = await db.notes.find_one({"id": note_id, "user_id": user["id"]}, {"_id": 0})
     if not note:
         raise HTTPException(status_code=404, detail="Note not found")
+    if "categories" not in note:
+        note["categories"] = [note.pop("category", "general")] if isinstance(note.get("category"), str) else note.get("category", ["general"])
     return note
 
 @api_router.put("/notes/{note_id}", response_model=NoteResponse)
@@ -586,6 +619,8 @@ async def update_note(note_id: str, data: NoteUpdate, user: dict = Depends(get_c
     await db.notes.update_one({"id": note_id}, {"$set": update_data})
     
     updated_note = await db.notes.find_one({"id": note_id}, {"_id": 0})
+    if "categories" not in updated_note:
+        updated_note["categories"] = [updated_note.pop("category", "general")] if isinstance(updated_note.get("category"), str) else updated_note.get("category", ["general"])
     return updated_note
 
 @api_router.delete("/notes/{note_id}")
