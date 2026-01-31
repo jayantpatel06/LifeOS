@@ -1,6 +1,6 @@
 # LifeOS - Personal Life Management Platform
 
-LifeOS is a comprehensive, gamified productivity platform designed to help you organize your life, build habits, and achieve your goals. It combines task management, note-taking, financial tracking, and focus tools into a single, unified interface wrapped in a rewarding gamification layer.
+LifeOS is a comprehensive, **gamified productivity platform** designed to help you organize your life, build habits, and achieve your goals. It combines task management, note-taking, financial tracking, and focus tools into a single, unified interface wrapped in a rewarding gamification layer.
 
 ## 🌟 Key Features
 
