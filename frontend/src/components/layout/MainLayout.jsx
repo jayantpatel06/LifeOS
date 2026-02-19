@@ -2,9 +2,23 @@ import { Outlet, Navigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { Sidebar } from './Sidebar';
 import { Toaster } from '../ui/sonner';
+import { useState, useEffect } from 'react';
 
 export const MainLayout = () => {
   const { isAuthenticated, loading } = useAuth();
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+
+  // Load collapse state from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem('sidebar-collapsed');
+    if (saved !== null) setIsSidebarCollapsed(JSON.parse(saved));
+  }, []);
+
+  const toggleSidebar = () => {
+    const newState = !isSidebarCollapsed;
+    setIsSidebarCollapsed(newState);
+    localStorage.setItem('sidebar-collapsed', JSON.stringify(newState));
+  };
 
   if (loading) {
     return (
@@ -23,10 +37,10 @@ export const MainLayout = () => {
 
   return (
     <div className="min-h-screen bg-background flex">
-      <Sidebar />
+      <Sidebar isCollapsed={isSidebarCollapsed} toggleCollapse={toggleSidebar} />
       <main className="flex-1 min-h-screen overflow-x-hidden">
         <div className="p-3 md:p-4 pt-14 md:pt-4">
-          <Outlet />
+          <Outlet context={{ isSidebarCollapsed }} />
         </div>
       </main>
       <Toaster position="bottom-right" richColors />

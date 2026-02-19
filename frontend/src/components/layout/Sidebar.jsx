@@ -37,23 +37,10 @@ const navItems = [
   { to: '/settings', icon: Settings, label: 'Settings' },
 ];
 
-export const Sidebar = () => {
+export const Sidebar = ({ isCollapsed, toggleCollapse }) => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [isCollapsed, setIsCollapsed] = useState(false);
-
-  // Load collapse state from localStorage
-  useEffect(() => {
-    const saved = localStorage.getItem('sidebar-collapsed');
-    if (saved !== null) setIsCollapsed(JSON.parse(saved));
-  }, []);
-
-  const toggleCollapse = () => {
-    const newState = !isCollapsed;
-    setIsCollapsed(newState);
-    localStorage.setItem('sidebar-collapsed', JSON.stringify(newState));
-  };
 
 
   const NavItem = ({ item }) => {

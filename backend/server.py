@@ -85,6 +85,7 @@ class TaskCreate(BaseModel):
     color: Optional[str] = "bg-card"
     checklist: List[ChecklistItem] = []
     position: Optional[int] = 0
+    is_pinned: bool = False
 
 class TaskUpdate(BaseModel):
     title: Optional[str] = None
@@ -98,6 +99,7 @@ class TaskUpdate(BaseModel):
     color: Optional[str] = None
     checklist: Optional[List[ChecklistItem]] = None
     position: Optional[int] = None
+    is_pinned: Optional[bool] = None
 
 class TaskResponse(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -113,9 +115,10 @@ class TaskResponse(BaseModel):
     due_date: Optional[str]
     completed_at: Optional[str]
     tags: List[str]
-    color: Optional[str] = "bg-card"
     checklist: List[ChecklistItem] = []
-    position: Optional[int] = 0
+    color: str = "bg-card"
+    position: int = 0
+    is_pinned: bool = False
     created_at: str
     updated_at: str
 
@@ -131,12 +134,14 @@ class NoteCreate(BaseModel):
     content: str = ""
     categories: List[str] = ["general"]  # study, budget, general, quick
     is_favorite: bool = False
+    parent_id: Optional[str] = None
 
 class NoteUpdate(BaseModel):
     title: Optional[str] = None
     content: Optional[str] = None
     categories: Optional[List[str]] = None
     is_favorite: Optional[bool] = None
+    parent_id: Optional[str] = None
 
 class NoteResponse(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -147,6 +152,7 @@ class NoteResponse(BaseModel):
     categories: List[str] = ["general"]
     tags: List[str] = []
     is_favorite: bool
+    parent_id: Optional[str] = None
     created_at: str
     updated_at: str
 
@@ -543,6 +549,7 @@ async def create_task(data: TaskCreate, user: dict = Depends(get_current_user)):
         "tags": data.tags,
         "checklist": [item.model_dump() for item in data.checklist],
         "color": data.color,
+        "is_pinned": data.is_pinned,
         "created_at": now,
         "updated_at": now
     }
@@ -655,6 +662,8 @@ async def create_note(data: NoteCreate, user: dict = Depends(get_current_user)):
         "content": data.content,
         "categories": data.categories,
         "is_favorite": data.is_favorite,
+        "parent_id": data.parent_id,
+        "tags": [],
         "created_at": now,
         "updated_at": now
     }

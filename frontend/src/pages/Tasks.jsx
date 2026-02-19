@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useOutletContext } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -12,7 +13,7 @@ import { toast } from 'sonner';
 import {
   Plus, Calendar, Clock, Edit, Trash2,
   CheckCircle2, Circle, Flame, CalendarDays, Palette, X,
-  ListChecks, Square, CheckSquare, ChevronDown, ChevronRight, RotateCcw, GripVertical
+  ListChecks, Square, CheckSquare, ChevronDown, ChevronRight, RotateCcw, GripVertical, Pin
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
@@ -93,7 +94,7 @@ const SortableChecklistItem = ({ id, item, idx, onToggle, onChange, onRemove, co
 };
 
 // Standard Task Card Component (No DnD)
-const TaskCard = ({ task, onClick, onColorUpdate, onDelete, onEdit, onReset, onToggleItem }) => {
+const TaskCard = ({ task, onClick, onColorUpdate, onDelete, onEdit, onReset, onToggleItem, onPin }) => {
   const colorConfig = COLORS.find(c => c.bg === task.color) || COLORS[0];
   const checklist = task.checklist || [];
   // Show ALL active items
@@ -111,6 +112,9 @@ const TaskCard = ({ task, onClick, onColorUpdate, onDelete, onEdit, onReset, onT
       >
         {/* Action Overlay */}
         <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 z-10" onPointerDown={(e) => e.stopPropagation()}>
+          <Button variant="ghost" size="icon" className={cn("h-7 w-7 rounded-full backdrop-blur-sm", task.is_pinned ? "bg-primary/20 text-primary hover:bg-primary/30" : "bg-background/50 hover:bg-background/80 text-muted-foreground")} onClick={() => onPin(task)}>
+            <Pin className={cn("w-3.5 h-3.5", task.is_pinned && "fill-current")} />
+          </Button>
           <Popover>
             <PopoverTrigger asChild>
               <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full bg-background/50 hover:bg-background/80 backdrop-blur-sm">
@@ -190,6 +194,7 @@ const TaskCard = ({ task, onClick, onColorUpdate, onDelete, onEdit, onReset, onT
 };
 
 export const Tasks = () => {
+  const { isSidebarCollapsed } = useOutletContext() || { isSidebarCollapsed: false };
   const { api } = useAuth();
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -344,6 +349,18 @@ export const Tasks = () => {
     setEditChecklistItems(newItems);
   };
 
+  const handlePin = async (task) => {
+    const newPinned = !task.is_pinned;
+    setTasks(prev => prev.map(t => t.id === task.id ? { ...t, is_pinned: newPinned } : t));
+    try {
+      await api.put(`/tasks/${task.id}`, { is_pinned: newPinned });
+      toast.success(newPinned ? 'Task pinned' : 'Task unpinned');
+    } catch (error) {
+      fetchTasks();
+      toast.error('Failed to update pin status');
+    }
+  };
+
   const handleColorUpdate = async (task, colorId) => {
     const colorObj = COLORS.find(c => c.id === colorId);
     if (!colorObj) return;
@@ -383,7 +400,7 @@ export const Tasks = () => {
   const quickAddColorClass = COLORS.find(c => c.id === quickColor)?.bg || 'bg-card';
 
   return (
-    <div className="space-y-8 max-w-[1600px] mx-auto pb-20 p-6" data-testid="tasks-page">
+    <div className="space-y-6 w-full p-4" data-testid="tasks-page">
       {/* Quick Add Input */}
       <div className="max-w-xl mx-auto w-full relative z-20">
         <div className={cn(quickAddColorClass, "border border-border rounded-xl shadow-sm transition-all duration-200 overflow-hidden", isQuickAddExpanded ? "shadow-lg ring-1 ring-primary/20" : "hover:shadow-md")}>
@@ -450,10 +467,72 @@ export const Tasks = () => {
       </div>
 
       {/* Task Grid - No DnD */}
-      <div className="flex flex-wrap justify-center gap-6">
-        {tasks.map(task => (
-          <div key={task.id} className="w-full md:w-[calc(50%-12px)] lg:w-[calc(33.33%-16px)] xl:w-[calc(25%-18px)] grow min-w-[300px]">
+      {/* Task Grid */}
+      {tasks.some(t => t.is_pinned) ? (
+        <>
+          <div className="mb-10">
+            <h6 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-4 pl-1">Pinned</h6>
+            <div className={cn(
+              "columns-1 md:columns-2 gap-6 space-y-6 mx-auto",
+              isSidebarCollapsed
+                ? "lg:columns-3 xl:columns-4"
+                : "lg:columns-2 xl:columns-3"
+            )}>
+              {tasks.filter(t => t.is_pinned).map(task => (
+                <TaskCard
+                  className="w-full mb-6 break-inside-avoid"
+                  key={task.id}
+                  task={task}
+                  onClick={() => { }}
+                  onColorUpdate={handleColorUpdate}
+                  onDelete={handleDelete}
+                  onEdit={handleEditClick}
+                  onReset={handleReset}
+                  onToggleItem={handleToggleItem}
+                  onPin={handlePin}
+                />
+              ))}
+            </div>
+          </div>
+
+          {tasks.some(t => !t.is_pinned) && (
+            <div>
+              <h6 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-4 pl-1">Others</h6>
+              <div className={cn(
+                "columns-1 md:columns-2 gap-6 space-y-6 mx-auto",
+                isSidebarCollapsed
+                  ? "lg:columns-3 xl:columns-4"
+                  : "lg:columns-2 xl:columns-3"
+              )}>
+                {tasks.filter(t => !t.is_pinned).map(task => (
+                  <TaskCard
+                    className="w-full mb-6 break-inside-avoid"
+                    key={task.id}
+                    task={task}
+                    onClick={() => { }}
+                    onColorUpdate={handleColorUpdate}
+                    onDelete={handleDelete}
+                    onEdit={handleEditClick}
+                    onReset={handleReset}
+                    onToggleItem={handleToggleItem}
+                    onPin={handlePin}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      ) : (
+        <div className={cn(
+          "columns-1 md:columns-2 gap-6 space-y-6 mx-auto",
+          isSidebarCollapsed
+            ? "lg:columns-3 xl:columns-4"
+            : "lg:columns-2 xl:columns-3"
+        )}>
+          {tasks.map(task => (
             <TaskCard
+              className="w-full mb-6 break-inside-avoid"
+              key={task.id}
               task={task}
               onClick={() => { }}
               onColorUpdate={handleColorUpdate}
@@ -461,10 +540,11 @@ export const Tasks = () => {
               onEdit={handleEditClick}
               onReset={handleReset}
               onToggleItem={handleToggleItem}
+              onPin={handlePin}
             />
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       {/* Edit Dialog */}
       < Dialog open={dialogOpen} onOpenChange={setDialogOpen} >
