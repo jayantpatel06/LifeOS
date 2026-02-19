@@ -11,6 +11,7 @@ from typing import List, Optional
 import uuid
 from datetime import datetime, timezone, timedelta
 import csv
+from pymongo import UpdateOne
 import io
 import jwt
 import bcrypt
@@ -69,6 +70,10 @@ class TokenResponse(BaseModel):
     user: UserResponse
 
 
+class ChecklistItem(BaseModel):
+    text: str
+    completed: bool = False
+
 class TaskCreate(BaseModel):
     title: str
     description: Optional[str] = ""
@@ -77,6 +82,9 @@ class TaskCreate(BaseModel):
     estimated_time: Optional[int] = None
     due_date: Optional[str] = None
     tags: List[str] = []
+    color: Optional[str] = "bg-card"
+    checklist: List[ChecklistItem] = []
+    position: Optional[int] = 0
 
 class TaskUpdate(BaseModel):
     title: Optional[str] = None
@@ -87,6 +95,9 @@ class TaskUpdate(BaseModel):
     due_date: Optional[str] = None
     tags: Optional[List[str]] = None
     status: Optional[str] = None
+    color: Optional[str] = None
+    checklist: Optional[List[ChecklistItem]] = None
+    position: Optional[int] = None
 
 class TaskResponse(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -102,8 +113,18 @@ class TaskResponse(BaseModel):
     due_date: Optional[str]
     completed_at: Optional[str]
     tags: List[str]
+    color: Optional[str] = "bg-card"
+    checklist: List[ChecklistItem] = []
+    position: Optional[int] = 0
     created_at: str
     updated_at: str
+
+class TaskReorderItem(BaseModel):
+    id: str
+    position: int
+
+class TaskReorderRequest(BaseModel):
+    items: List[TaskReorderItem]
 
 class NoteCreate(BaseModel):
     title: str
@@ -513,12 +534,15 @@ async def create_task(data: TaskCreate, user: dict = Depends(get_current_user)):
         "description": data.description or "",
         "category": data.category,
         "priority": data.priority,
+        "position": data.position if data.position is not None else 0,
         "status": "pending",
         "estimated_time": data.estimated_time,
         "actual_time": None,
         "due_date": data.due_date,
         "completed_at": None,
         "tags": data.tags,
+        "checklist": [item.model_dump() for item in data.checklist],
+        "color": data.color,
         "created_at": now,
         "updated_at": now
     }
@@ -572,6 +596,30 @@ async def complete_task(task_id: str, user: dict = Depends(get_current_user)):
     
     updated_task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
     return updated_task
+
+@api_router.put("/tasks/reorder")
+async def reorder_tasks(data: TaskReorderRequest, user: dict = Depends(get_current_user)):
+    try:
+        # Use bulk_write for efficiency if possible, or loop updates
+        # MongoDB bulk_write is compatible with motor? Yes.
+        
+        print(f"Reordering {len(data.items)} tasks for user {user['id']}")
+        
+        operations = [
+            UpdateOne(
+                {"id": item.id, "user_id": user["id"]},
+                {"$set": {"position": item.position, "updated_at": datetime.now(timezone.utc).isoformat()}}
+            )
+            for item in data.items
+        ]
+        
+        if operations:
+            await db.tasks.bulk_write(operations)
+        
+        return {"message": "Tasks reordered"}
+    except Exception as e:
+        print(f"Error reordering tasks: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.delete("/tasks/{task_id}")
 async def delete_task(task_id: str, user: dict = Depends(get_current_user)):

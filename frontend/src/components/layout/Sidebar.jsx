@@ -105,7 +105,7 @@ export const Sidebar = () => {
           className="flex items-center gap-3 overflow-hidden group/logo"
           title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden shadow-lg glow-primary shrink-0 ">
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden shrink-0 ">
             <img src="/logo192-v2.png" alt="LifeOS Logo" className="w-full h-full object-cover" />
           </div>
           {(!isCollapsed || mobileOpen) && (
@@ -187,7 +187,7 @@ export const Sidebar = () => {
       {/* Sidebar */}
       <aside
         className={cn(
-          "fixed md:sticky top-0 left-0 z-40 h-screen transition-all duration-300 ease-in-out bg-card/95 backdrop-blur-xl border-r border-border/50 flex flex-col",
+          "fixed md:sticky top-0 left-0 z-40 h-screen transition-all duration-300 ease-in-out bg-background border-r border-border/50 flex flex-col",
           (isCollapsed && !mobileOpen) ? "w-16" : "w-52",
           mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
         )}
