@@ -25,7 +25,7 @@ export const MainLayout = () => {
     <div className="min-h-screen bg-background flex">
       <Sidebar />
       <main className="flex-1 min-h-screen overflow-x-hidden">
-        <div className="p-4 md:p-6 lg:p-8 pt-16 md:pt-6">
+        <div className="p-3 md:p-4 pt-14 md:pt-4">
           <Outlet />
         </div>
       </main>

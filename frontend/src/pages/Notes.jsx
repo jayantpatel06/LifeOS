@@ -19,10 +19,11 @@ import Link from '@tiptap/extension-link';
 import Image from '@tiptap/extension-image';
 import Youtube from '@tiptap/extension-youtube';
 import Placeholder from '@tiptap/extension-placeholder';
+import Instagram from '../extensions/Instagram';
 import {
   Plus, FileText, BookOpen, Wallet, Zap, MoreVertical, Trash2, Edit, Star, StarOff,
   Bold, Italic, Strikethrough, Code, List, ListOrdered, Quote, Heading1, Heading2,
-  Link as LinkIcon, Image as ImageIcon, Youtube as YoutubeIcon, File, Search, Tag, X, Check, ArrowLeft
+  Link as LinkIcon, Image as ImageIcon, Youtube as YoutubeIcon, Instagram as InstagramIcon, File, Search, Tag, X, Check, ArrowLeft, Upload
 } from 'lucide-react';
 
 
@@ -48,6 +49,25 @@ const EditorToolbar = ({ editor }) => {
     const url = window.prompt('Enter image URL:');
     if (url) {
       editor.commands.setImage({ src: url });
+    }
+  };
+
+  const handleImageUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        editor.commands.setImage({ src: event.target.result });
+      };
+      reader.readAsDataURL(file);
+    }
+    e.target.value = ''; // Reset input
+  };
+
+  const addInstagramPost = () => {
+    const url = window.prompt('Enter Instagram post or reel URL:');
+    if (url) {
+      editor.commands.setInstagramPost({ src: url });
     }
   };
 
@@ -149,9 +169,22 @@ const EditorToolbar = ({ editor }) => {
       <Button type="button" variant="ghost" size="icon" onClick={addYoutubeVideo}>
         <YoutubeIcon className="w-4 h-4" />
       </Button>
-      <Button type="button" variant="ghost" size="icon" onClick={addImage}>
+      <Button type="button" variant="ghost" size="icon" onClick={addInstagramPost}>
+        <InstagramIcon className="w-4 h-4" />
+      </Button>
+      <Button type="button" variant="ghost" size="icon" onClick={addImage} title="Add image from URL">
         <ImageIcon className="w-4 h-4" />
       </Button>
+      <Button type="button" variant="ghost" size="icon" onClick={() => document.getElementById('image-upload').click()} title="Upload image from device">
+        <Upload className="w-4 h-4" />
+      </Button>
+      <input
+        type="file"
+        id="image-upload"
+        accept="image/*"
+        onChange={handleImageUpload}
+        className="hidden"
+      />
       <Button
         type="button"
         variant="ghost"
@@ -197,6 +230,10 @@ export const Notes = () => {
         height: 360,
         HTMLAttributes: { class: 'youtube-video' },
         controls: true
+      }),
+      Instagram.configure({
+        width: 400,
+        height: 500,
       }),
       Placeholder.configure({ placeholder: 'Write something amazing...' })
     ],

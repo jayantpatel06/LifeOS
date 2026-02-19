@@ -12,7 +12,7 @@ import {
   Timer,
   Trophy,
   Settings,
-  LogOut,
+
   Flame,
   Zap,
   Menu,
@@ -34,10 +34,11 @@ const navItems = [
   { to: '/budget', icon: Wallet, label: 'Budget' },
   { to: '/focus', icon: Timer, label: 'Focus Timer' },
   { to: '/achievements', icon: Trophy, label: 'Achievements' },
+  { to: '/settings', icon: Settings, label: 'Settings' },
 ];
 
 export const Sidebar = () => {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -54,10 +55,6 @@ export const Sidebar = () => {
     localStorage.setItem('sidebar-collapsed', JSON.stringify(newState));
   };
 
-  const handleLogout = () => {
-    logout();
-    navigate('/');
-  };
 
   const NavItem = ({ item }) => {
     const content = (
@@ -70,7 +67,7 @@ export const Sidebar = () => {
             isActive
               ? "bg-primary/10 text-primary border border-primary/20 shadow-lg glow-primary"
               : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
-            isCollapsed && !mobileOpen ? "justify-center px-0 w-12 mx-auto" : ""
+            isCollapsed && !mobileOpen ? "justify-center" : ""
           )
         }
         data-testid={`nav-${item.label.toLowerCase().replace(' ', '-')}`}
@@ -124,7 +121,7 @@ export const Sidebar = () => {
           (isCollapsed && !mobileOpen) ? "p-2 items-center flex flex-col" : ""
         )}>
           <div className={cn("flex items-center gap-3 mb-3 w-full", (isCollapsed && !mobileOpen) ? "flex-col mb-0" : "")}>
-            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-white font-semibold shrink-0 cursor-pointer hover:ring-2 ring-primary/50 transition-all">
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-white font-semibold shrink-0 cursor-pointer hover:ring-2 ring-primary/50 transition-all">
               {user?.username?.charAt(0).toUpperCase()}
             </div>
             {(!isCollapsed || mobileOpen) && (
@@ -155,7 +152,7 @@ export const Sidebar = () => {
       <Separator className={cn("mx-4 w-auto", (isCollapsed && !mobileOpen) ? "mx-2" : "mx-4")} />
 
       {/* Navigation */}
-      <ScrollArea className="flex-1 px-4 py-3">
+      <ScrollArea className={cn("flex-1 py-3", (isCollapsed && !mobileOpen) ? "px-1" : "px-3")}>
         <nav className={cn("space-y-1 flex flex-col", (isCollapsed && !mobileOpen) ? "items-center" : "items-stretch")}>
           {navItems.map((item) => (
             <NavItem key={item.to} item={item} />
@@ -163,68 +160,6 @@ export const Sidebar = () => {
         </nav>
       </ScrollArea>
 
-      {/* Bottom Actions */}
-      <div className={cn("p-4 space-y-2", (isCollapsed && !mobileOpen) ? "px-0 pb-6 flex flex-col items-center" : "p-4")}>
-        {/* Settings */}
-        {isCollapsed && !mobileOpen ? (
-          <Tooltip delayDuration={0}>
-            <TooltipTrigger asChild>
-              <NavLink
-                to="/settings"
-                className={({ isActive }) =>
-                  cn(
-                    "flex items-center justify-center w-12 h-12 rounded-xl text-sm font-medium transition-all duration-200 mx-auto",
-                    isActive ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                  )
-                }
-              >
-                <Settings className="w-5 h-5" />
-              </NavLink>
-            </TooltipTrigger>
-            <TooltipContent side="right">Settings</TooltipContent>
-          </Tooltip>
-        ) : (
-          <NavLink
-            to="/settings"
-            onClick={() => setMobileOpen(false)}
-            className={({ isActive }) =>
-              cn(
-                "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200",
-                isActive ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
-              )
-            }
-          >
-            <Settings className="w-5 h-5" />
-            Settings
-          </NavLink>
-        )}
-
-        {/* Logout */}
-        {isCollapsed && !mobileOpen ? (
-          <Tooltip delayDuration={0}>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="w-12 h-12 rounded-xl text-muted-foreground hover:text-destructive hover:bg-destructive/10 mx-auto"
-                onClick={handleLogout}
-              >
-                <LogOut className="w-5 h-5" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="right">Logout</TooltipContent>
-          </Tooltip>
-        ) : (
-          <Button
-            variant="ghost"
-            className="w-full justify-start gap-3 px-4 py-3 h-auto text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-            onClick={handleLogout}
-          >
-            <LogOut className="w-5 h-5" />
-            Logout
-          </Button>
-        )}
-      </div>
     </TooltipProvider>
   );
 
@@ -253,7 +188,7 @@ export const Sidebar = () => {
       <aside
         className={cn(
           "fixed md:sticky top-0 left-0 z-40 h-screen transition-all duration-300 ease-in-out bg-card/95 backdrop-blur-xl border-r border-border/50 flex flex-col",
-          (isCollapsed && !mobileOpen) ? "w-20" : "w-64",
+          (isCollapsed && !mobileOpen) ? "w-16" : "w-52",
           mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
         )}
       >

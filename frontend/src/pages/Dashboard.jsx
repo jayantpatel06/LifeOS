@@ -2,31 +2,35 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import { Button } from '../components/ui/button';
-import { Progress } from '../components/ui/progress';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../components/ui/tooltip';
+import { Checkbox } from '../components/ui/checkbox';
+import { Input } from '../components/ui/input';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '../components/ui/dialog';
 import {
-  Flame, Zap, CheckSquare, FileText, Timer, TrendingUp,
+  Flame, CheckSquare, FileText, Timer,
   Calendar, Target, Award, ChevronRight, Plus
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import { format, subDays, parseISO, startOfYear, eachDayOfInterval, subMonths, startOfMonth, endOfMonth } from 'date-fns';
+import { format } from 'date-fns';
 
 export const Dashboard = () => {
   const { user, api, refreshUser } = useAuth();
-  const [stats, setStats] = useState(null);
-  const [activityData, setActivityData] = useState([]);
+  const [tasks, setTasks] = useState([]);
+  const [habits, setHabits] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [habitDialogOpen, setHabitDialogOpen] = useState(false);
+  const [newHabitTitle, setNewHabitTitle] = useState('');
+  const [newHabitIcon, setNewHabitIcon] = useState('☀️');
 
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
-        const [statsRes, activityRes] = await Promise.all([
-          api.get('/dashboard/stats'),
-          api.get('/dashboard/activity?days=365')
+        const [tasksRes, habitsRes] = await Promise.all([
+          api.get('/tasks'),
+          api.get('/habits')
         ]);
-        setStats(statsRes.data);
-        setActivityData(activityRes.data);
+        setTasks(tasksRes.data || []);
+        setHabits(habitsRes.data || []);
         refreshUser();
       } catch (error) {
         console.error('Failed to fetch dashboard data:', error);
@@ -38,88 +42,81 @@ export const Dashboard = () => {
     fetchDashboardData();
   }, [api, refreshUser]);
 
-  // Generate contribution month-by-month data
-  const generateMonthData = () => {
-    const today = new Date();
-    const months = [];
 
-    const activityMap = {};
-    activityData.forEach(day => {
-      activityMap[day.date] = day.tasks_completed + Math.floor(day.focus_time / 25);
-    });
+  // Get today's tasks (pending first, then completed, limit to 4)
+  const todaysTasks = tasks
+    .sort((a, b) => {
+      // Pending tasks first
+      if (a.status === 'pending' && b.status !== 'pending') return -1;
+      if (a.status !== 'pending' && b.status === 'pending') return 1;
+      // Then by priority
+      return b.priority - a.priority;
+    })
+    .slice(0, 4);
 
-    for (let i = 11; i >= 0; i--) {
-      const monthDate = subMonths(today, i);
-      const start = startOfMonth(monthDate);
-      const end = endOfMonth(monthDate);
-      const monthName = format(monthDate, 'MMM');
-      const year = format(monthDate, 'yyyy');
+  const completedTasksCount = tasks.filter(t => t.status === 'completed').length;
+  const pendingTasksCount = tasks.filter(t => t.status === 'pending').length;
 
-      const monthDays = [];
-      const leadingDays = start.getDay();
+  // Priority/category colors
+  const getPriorityColor = (priority) => {
+    if (priority >= 3) return 'bg-rose-500/20 text-rose-400 border-rose-500/30';
+    if (priority === 2) return 'bg-amber-500/20 text-amber-400 border-amber-500/30';
+    return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
+  };
 
-      // Leading placeholders to align the 1st day to the correct row (weekday)
-      for (let j = 0; j < leadingDays; j++) {
-        monthDays.push({ type: 'empty' });
-      }
+  const getPriorityLabel = (priority) => {
+    if (priority >= 3) return 'High';
+    if (priority === 2) return 'Medium';
+    return 'Low';
+  };
 
-      // Actual days
-      const daysInMonth = eachDayOfInterval({ start, end });
-      daysInMonth.forEach(date => {
-        const dateStr = format(date, 'yyyy-MM-dd');
-        const count = activityMap[dateStr] || 0;
-        let level = 0;
-        if (count > 0) level = 1;
-        if (count >= 3) level = 2;
-        if (count >= 5) level = 3;
-        if (count >= 8) level = 4;
+  const getCategoryColor = (category) => {
+    const colors = {
+      daily: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+      weekly: 'bg-violet-500/20 text-violet-400 border-violet-500/30',
+      goal: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
+    };
+    return colors[category] || 'bg-muted/30 text-muted-foreground border-border/50';
+  };
 
-        monthDays.push({ type: 'day', date: dateStr, count, level });
+  const toggleTaskComplete = async (taskId, currentStatus) => {
+    try {
+      const newStatus = currentStatus === 'completed' ? 'pending' : 'completed';
+      await api.put(`/tasks/${taskId}`, { status: newStatus });
+      setTasks(tasks.map(t => t.id === taskId ? { ...t, status: newStatus } : t));
+      refreshUser();
+    } catch (error) {
+      console.error('Failed to toggle task:', error);
+    }
+  };
+
+  const toggleHabitComplete = async (habitId, currentlyCompleted) => {
+    try {
+      const newCompleted = !currentlyCompleted;
+      await api.put(`/habits/${habitId}`, { is_completed: newCompleted });
+      setHabits(habits.map(h => h.id === habitId ? { ...h, is_completed: newCompleted } : h));
+      refreshUser();
+    } catch (error) {
+      console.error('Failed to toggle habit:', error);
+    }
+  };
+
+  const completedHabitsCount = habits.filter(h => h.is_completed).length;
+
+  const createHabit = async () => {
+    if (!newHabitTitle.trim()) return;
+    try {
+      const res = await api.post('/habits', {
+        title: newHabitTitle.trim(),
+        icon: newHabitIcon || '☀️'
       });
-
-      // Trailing placeholders to complete the last week
-      while (monthDays.length % 7 !== 0) {
-        monthDays.push({ type: 'empty' });
-      }
-
-      months.push({ name: monthName, year, days: monthDays });
+      setHabits([...habits, res.data]);
+      setNewHabitTitle('');
+      setNewHabitIcon('☀️');
+      setHabitDialogOpen(false);
+    } catch (error) {
+      console.error('Failed to create habit:', error);
     }
-    return months;
-  };
-
-  const monthsData = generateMonthData();
-  const totalSubmissions = activityData.reduce((sum, d) => sum + d.tasks_completed + Math.floor(d.focus_time / 25), 0);
-  const totalActiveDays = activityData.filter(d => (d.tasks_completed + d.focus_time) > 0).length;
-
-  const xpForNextLevel = () => {
-    const level = user?.current_level || 1;
-    const xp = user?.total_xp || 0;
-    if (level < 10) return (level + 1) * 100 - xp;
-    if (level < 25) return 1000 + (level - 9) * 200 - xp;
-    if (level < 50) return 4000 + (level - 24) * 500 - xp;
-    return 16500 + (level - 49) * 1000 - xp;
-  };
-
-  const xpProgress = () => {
-    const level = user?.current_level || 1;
-    const xp = user?.total_xp || 0;
-    let levelXP, nextLevelXP;
-
-    if (level < 10) {
-      levelXP = level * 100;
-      nextLevelXP = (level + 1) * 100;
-    } else if (level < 25) {
-      levelXP = 1000 + (level - 10) * 200;
-      nextLevelXP = levelXP + 200;
-    } else if (level < 50) {
-      levelXP = 4000 + (level - 25) * 500;
-      nextLevelXP = levelXP + 500;
-    } else {
-      levelXP = 16500 + (level - 50) * 1000;
-      nextLevelXP = levelXP + 1000;
-    }
-
-    return Math.min(100, ((xp - levelXP) / (nextLevelXP - levelXP)) * 100);
   };
 
   if (loading) {
@@ -131,196 +128,152 @@ export const Dashboard = () => {
   }
 
   return (
-    <div className="space-y-6" data-testid="dashboard-page">
+    <div className="space-y-4" data-testid="dashboard-page">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold font-['Outfit'] tracking-tight">
-            Welcome back, {user?.username}!
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            {format(new Date(), 'EEEE, MMMM d, yyyy')}
-          </p>
-        </div>
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">
+          {format(new Date(), 'EEEE, MMMM d, yyyy')}
+        </p>
         <Link to="/tasks">
-          <Button className="gap-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white shadow-lg shadow-cyan-500/20" data-testid="quick-add-task-btn">
+          <Button size="sm" className="gap-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white shadow-lg shadow-cyan-500/20" data-testid="quick-add-task-btn">
             <Plus className="w-4 h-4" /> Add Task
           </Button>
         </Link>
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Streak Card */}
+
+
+      {/* Tasks and Habits Preview - Side by Side */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Quick Tasks Preview */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
+          transition={{ delay: 0.45 }}
         >
-          <Card className="border-orange-500/40 bg-gradient-to-br from-card to-orange-950/20 shadow-lg shadow-orange-900/10" data-testid="streak-card">
-            <CardContent className="p-6">
+          <Card className="border-violet-500/20 bg-gradient-to-br from-card to-violet-950/10 shadow-lg shadow-violet-900/5 h-full" data-testid="quick-tasks-preview">
+            <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Current Streak</p>
-                  <p className="text-4xl font-bold font-mono mt-1">{user?.current_streak || 0}</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Best: {user?.longest_streak || 0} days
-                  </p>
-                </div>
-                <div className={`w-16 h-16 rounded-2xl bg-orange-500/20 flex items-center justify-center ${user?.current_streak > 0 ? 'glow-fire' : ''}`}>
-                  <Flame className={`w-8 h-8 text-orange-500 ${user?.current_streak > 0 ? 'animate-fire' : ''}`} />
-                </div>
+                <CardTitle className="text-base font-semibold">Tasks</CardTitle>
+                <span className="text-sm text-emerald-500 font-semibold">
+                  {completedTasksCount}/{completedTasksCount + pendingTasksCount}
+                </span>
               </div>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {todaysTasks.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">No pending tasks</p>
+              ) : (
+                todaysTasks.map((task) => (
+                  <div key={task.id} className={`flex items-center justify-between py-2 border-b border-border/30 last:border-0 ${task.status === 'completed' ? 'opacity-60' : ''}`}>
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <Checkbox
+                        checked={task.status === 'completed'}
+                        onCheckedChange={() => toggleTaskComplete(task.id, task.status)}
+                        className="border-emerald-500/50 data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-500"
+                      />
+                      <span className={`text-sm truncate ${task.status === 'completed' ? 'line-through text-muted-foreground' : ''}`}>{task.title}</span>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0 ml-2">
+                      <span className={`text-xs px-2 py-0.5 rounded-full border ${getCategoryColor(task.category)}`}>
+                        {task.category}
+                      </span>
+                      <span className={`text-xs px-2 py-0.5 rounded-full border ${getPriorityColor(task.priority)}`}>
+                        {getPriorityLabel(task.priority)}
+                      </span>
+                    </div>
+                  </div>
+                ))
+              )}
+              <Link to="/tasks" className="block pt-2">
+                <Button variant="ghost" className="w-full justify-between text-muted-foreground hover:text-foreground">
+                  View all tasks
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
+              </Link>
             </CardContent>
           </Card>
         </motion.div>
 
-        {/* XP Card */}
+        {/* Habits Preview */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
+          transition={{ delay: 0.5 }}
         >
-          <Card className="border-violet-500/40 bg-gradient-to-br from-card to-violet-950/20 shadow-lg shadow-violet-900/10" data-testid="xp-card">
-            <CardContent className="p-6 pb-5">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <p className="text-sm text-muted-foreground font-medium">Level {user?.current_level || 1}</p>
-                  <p className="text-4xl font-bold font-mono tracking-tighter mt-1">
-                    {user?.total_xp || 0}<span className="text-lg text-muted-foreground">/{xpForNextLevel() + user?.total_xp}</span>
-                  </p>
-                </div>
-                <div className="w-16 h-16 rounded-2xl bg-violet-500/20 flex items-center justify-center glow-primary shrink-0">
-                  <Zap className="w-8 h-8 text-violet-500" />
-                </div>
-              </div>
-              <Progress value={xpProgress()} className="h-2 bg-violet-500/10" />
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        {/* Tasks Today */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-        >
-          <Card className="border-emerald-500/20 bg-gradient-to-br from-card to-emerald-950/20" data-testid="tasks-today-card">
-            <CardContent className="p-6 pb-5">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <p className="text-sm text-muted-foreground">Tasks Today</p>
-                  <p className="text-4xl font-bold font-mono mt-1">
-                    {stats?.tasks_completed_today || 0}
-                    <span className="text-lg text-muted-foreground">/{stats?.tasks_total_today || 0}</span>
-                  </p>
-                </div>
-                <div className="w-16 h-16 rounded-2xl bg-emerald-500/20 flex items-center justify-center glow-secondary">
-                  <CheckSquare className="w-8 h-8 text-emerald-500" />
-                </div>
-              </div>
-              <Progress
-                value={stats?.tasks_total_today > 0 ? (stats?.tasks_completed_today / stats?.tasks_total_today) * 100 : 0}
-                className="h-2"
-              />
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        {/* Focus Time */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4 }}
-        >
-          <Card className="border-blue-500/20 bg-gradient-to-br from-card to-blue-950/20" data-testid="focus-time-card">
-            <CardContent className="p-6 pb-11">
+          <Card className="border-emerald-500/20 bg-gradient-to-br from-card to-emerald-950/10 shadow-lg shadow-emerald-900/5 h-full" data-testid="habits-preview">
+            <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Focus Today</p>
-                  <p className="text-4xl font-bold font-mono mt-1">
-                    {Math.floor((stats?.focus_time_today || 0) / 60)}
-                    <span className="text-lg text-muted-foreground">h </span>
-                    {(stats?.focus_time_today || 0) % 60}
-                    <span className="text-lg text-muted-foreground">m</span>
-                  </p>
-                </div>
-                <div className="w-16 h-16 rounded-2xl bg-blue-500/20 flex items-center justify-center">
-                  <Timer className="w-8 h-8 text-blue-500" />
-                </div>
+                <CardTitle className="text-base font-semibold">Today's Habits</CardTitle>
+                <span className="text-sm text-emerald-500 font-semibold">
+                  {completedHabitsCount}/{habits.length}
+                </span>
               </div>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {habits.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">No habits yet</p>
+              ) : (
+                habits.map((habit) => (
+                  <div key={habit.id} className={`flex items-center justify-between py-2 border-b border-border/30 last:border-0 ${habit.is_completed ? 'opacity-60' : ''}`}>
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <Checkbox
+                        checked={habit.is_completed}
+                        onCheckedChange={() => toggleHabitComplete(habit.id, habit.is_completed)}
+                        className="border-emerald-500/50 data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-500"
+                      />
+                      <span className="text-lg mr-1">{habit.icon}</span>
+                      <span className={`text-sm truncate ${habit.is_completed ? 'line-through text-muted-foreground' : ''}`}>{habit.title}</span>
+                    </div>
+                    {habit.current_streak > 0 && (
+                      <div className="flex items-center gap-1 text-orange-500 shrink-0 ml-2">
+                        <Flame className="w-3.5 h-3.5" />
+                        <span className="text-sm font-medium">{habit.current_streak}</span>
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+              <Dialog open={habitDialogOpen} onOpenChange={setHabitDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="ghost" className="w-full justify-center text-muted-foreground hover:text-foreground mt-2 gap-2">
+                    <Plus className="w-4 h-4" />
+                    Add habit
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-md">
+                  <DialogHeader>
+                    <DialogTitle>Create New Habit</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4 py-4">
+                    <div className="flex gap-3">
+                      <Input
+                        value={newHabitIcon}
+                        onChange={(e) => setNewHabitIcon(e.target.value)}
+                        placeholder="☀️"
+                        className="w-16 text-center text-xl"
+                        maxLength={2}
+                      />
+                      <Input
+                        value={newHabitTitle}
+                        onChange={(e) => setNewHabitTitle(e.target.value)}
+                        placeholder="Habit name..."
+                        className="flex-1"
+                        onKeyDown={(e) => e.key === 'Enter' && createHabit()}
+                      />
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setHabitDialogOpen(false)}>Cancel</Button>
+                    <Button onClick={createHabit} disabled={!newHabitTitle.trim()}>Create Habit</Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </CardContent>
           </Card>
         </motion.div>
       </div>
 
-      {/* Contribution Grid */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.5 }}
-      >
-        <Card data-testid="contribution-grid-card" className="border-border/50 bg-card/50 backdrop-blur-xl">
-          <CardHeader className="pb-2 pt-3">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div className="flex items-center gap-2">
-                <span className="text-2xl font-bold tracking-tight">{totalSubmissions}</span>
-                <span className="text-muted-foreground font-medium">submissions in the past one year</span>
-              </div>
-              <div className="flex flex-wrap items-center gap-6 text-sm text-muted-foreground">
-                <p>Total active days: <span className="text-foreground font-semibold">{totalActiveDays}</span></p>
-                <p>Max streak: <span className="text-foreground font-semibold">{user?.longest_streak || 0}</span></p>
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-muted/20 border border-border/50 rounded-lg text-xs font-semibold hover:bg-muted/30 transition-colors cursor-pointer">
-                  {new Date().getFullYear()}
-                </div>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="py-1">
-              <div className="flex justify-between items-start w-full">
-                <TooltipProvider>
-                  {monthsData.map((month, mIdx) => (
-                    <div key={mIdx} className="flex flex-col gap-1 flex-1 max-w-fit">
-                      {/* Vertical Grid: 7 Rows for days, flowing into columns for weeks */}
-                      <div className="grid grid-rows-7 grid-flow-col gap-1 h-[100px]">
-                        {month.days.map((day, dIdx) => (
-                          <div key={dIdx} className="w-2.5 h-2.5 flex items-center justify-center">
-                            {day.type === 'empty' ? (
-                              <div className="w-2 h-2 rounded-sm bg-muted/10 opacity-30" />
-                            ) : (
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <div
-                                    className={`w-2.5 h-2.5 rounded-sm contribution-cell level-${day.level} hover:opacity-80 transition-all cursor-pointer shadow-sm`}
-                                    data-testid={`contribution-cell-${day.date}`}
-                                  />
-                                </TooltipTrigger>
-                                <TooltipContent side="top" className="bg-popover/95 backdrop-blur-md border-border shadow-2xl">
-                                  <div className="space-y-1">
-                                    <p className="font-bold text-[10px]">{day.count} contributions</p>
-                                    <p className="text-[10px] text-muted-foreground">
-                                      {format(parseISO(day.date), 'MMMM d, yyyy')}
-                                    </p>
-                                  </div>
-                                </TooltipContent>
-                              </Tooltip>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                      {/* Month Label at Bottom */}
-                      <p className="text-[15px] font-medium text-muted-foreground text-center">
-                        {month.name}
-                      </p>
-                    </div>
-                  ))}
-                </TooltipProvider>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </motion.div>
 
       {/* Quick Actions */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -338,9 +291,7 @@ export const Dashboard = () => {
                   </div>
                   <div>
                     <p className="font-semibold">Tasks</p>
-                    <p className="text-sm text-muted-foreground">
-                      {stats?.weekly_completion_rate || 0}% complete this week
-                    </p>
+                    <p className="text-sm text-muted-foreground">Manage your tasks</p>
                   </div>
                 </div>
                 <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
@@ -363,7 +314,7 @@ export const Dashboard = () => {
                   </div>
                   <div>
                     <p className="font-semibold">Notes</p>
-                    <p className="text-sm text-muted-foreground">{stats?.notes_count || 0} notes created</p>
+                    <p className="text-sm text-muted-foreground">View your notes</p>
                   </div>
                 </div>
                 <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />

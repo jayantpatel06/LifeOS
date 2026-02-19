@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, status
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, UploadFile, File
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -10,6 +10,8 @@ from pydantic import BaseModel, Field, ConfigDict, EmailStr
 from typing import List, Optional
 import uuid
 from datetime import datetime, timezone, timedelta
+import csv
+import io
 import jwt
 import bcrypt
 
@@ -127,36 +129,25 @@ class NoteResponse(BaseModel):
     created_at: str
     updated_at: str
 
-class TransactionCreate(BaseModel):
-    type: str  # income, expense
-    amount: float
-    category: str
-    section: str = "Personal"  # Personal, Salary, Other
-    description: Optional[str] = ""
-    date: str
-    is_recurring: bool = False
+class BudgetSheetCreate(BaseModel):
+    name: str
 
-class TransactionUpdate(BaseModel):
-    type: Optional[str] = None
-    amount: Optional[float] = None
-    category: Optional[str] = None
-    section: Optional[str] = None
-    description: Optional[str] = None
+class BudgetSheetUpdate(BaseModel):
+    name: Optional[str] = None
+    order: Optional[int] = None
+
+class BudgetRowCreate(BaseModel):
+    date: str = ""
+    description: str = ""
+    credit: float = 0
+    debit: float = 0
+
+class BudgetRowUpdate(BaseModel):
     date: Optional[str] = None
-    is_recurring: Optional[bool] = None
-
-class TransactionResponse(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-    id: str
-    user_id: str
-    type: str
-    amount: float
-    category: str
-    section: str
-    description: str
-    date: str
-    is_recurring: bool
-    created_at: str
+    description: Optional[str] = None
+    credit: Optional[float] = None
+    debit: Optional[float] = None
+    order: Optional[int] = None
 
 class FocusSessionCreate(BaseModel):
     duration_planned: int
@@ -208,6 +199,34 @@ class DashboardStats(BaseModel):
     focus_time_today: int
     notes_count: int
     weekly_completion_rate: float
+    total_tasks_completed: int
+    total_focus_time: int
+
+class HabitCreate(BaseModel):
+    title: str
+    icon: Optional[str] = "☀️"
+    order: Optional[int] = None
+
+class HabitUpdate(BaseModel):
+    title: Optional[str] = None
+    icon: Optional[str] = None
+    order: Optional[int] = None
+    is_completed: Optional[bool] = None
+
+class HabitResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str
+    user_id: str
+    title: str
+    icon: str
+    order: int
+    is_completed: bool
+    last_completed_date: Optional[str] = None
+    current_streak: int = 0
+    created_at: str
+
+class HabitReorder(BaseModel):
+    habit_ids: List[str]
 
 # ============ HELPERS ============
 
@@ -630,95 +649,186 @@ async def delete_note(note_id: str, user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="Note not found")
     return {"message": "Note deleted"}
 
-# ============ BUDGET ROUTES ============
+# ============ BUDGET SHEETS ROUTES ============
 
-@api_router.get("/budget/transactions", response_model=List[TransactionResponse])
-async def get_transactions(type: Optional[str] = None, user: dict = Depends(get_current_user)):
-    query = {"user_id": user["id"]}
-    if type:
-        query["type"] = type
-    
-    transactions = await db.transactions.find(query, {"_id": 0}).sort([("date", -1), ("created_at", -1)]).to_list(1000)
-    return transactions
+# --- Sheet CRUD ---
 
-@api_router.post("/budget/transactions", response_model=TransactionResponse)
-async def create_transaction(data: TransactionCreate, user: dict = Depends(get_current_user)):
+@api_router.get("/budget/sheets")
+async def get_sheets(user: dict = Depends(get_current_user)):
+    sheets = await db.budget_sheets.find({"user_id": user["id"]}, {"_id": 0}).sort("order", 1).to_list(100)
+    return sheets
+
+@api_router.post("/budget/sheets")
+async def create_sheet(data: BudgetSheetCreate, user: dict = Depends(get_current_user)):
     now = datetime.now(timezone.utc).isoformat()
-    transaction_id = str(uuid.uuid4())
-    
-    transaction_doc = {
-        "id": transaction_id,
+    count = await db.budget_sheets.count_documents({"user_id": user["id"]})
+    sheet_doc = {
+        "id": str(uuid.uuid4()),
         "user_id": user["id"],
-        "type": data.type,
-        "amount": data.amount,
-        "category": data.category,
-        "section": data.section,
-        "description": data.description or "",
-        "date": data.date,
-        "is_recurring": data.is_recurring,
+        "name": data.name,
+        "order": count,
         "created_at": now
     }
-    
-    await db.transactions.insert_one(transaction_doc)
-    
-    if data.type == "expense":
-        await update_daily_activity(user["id"], "expenses_logged")
-    
-    return TransactionResponse(**transaction_doc)
+    await db.budget_sheets.insert_one(sheet_doc)
+    sheet_doc.pop('_id', None)
+    return sheet_doc
 
-@api_router.put("/budget/transactions/{transaction_id}", response_model=TransactionResponse)
-async def update_transaction(transaction_id: str, data: TransactionUpdate, user: dict = Depends(get_current_user)):
-    transaction = await db.transactions.find_one({"id": transaction_id, "user_id": user["id"]}, {"_id": 0})
-    if not transaction:
-        raise HTTPException(status_code=404, detail="Transaction not found")
-    
+@api_router.put("/budget/sheets/{sheet_id}")
+async def update_sheet(sheet_id: str, data: BudgetSheetUpdate, user: dict = Depends(get_current_user)):
+    sheet = await db.budget_sheets.find_one({"id": sheet_id, "user_id": user["id"]})
+    if not sheet:
+        raise HTTPException(status_code=404, detail="Sheet not found")
     update_data = {k: v for k, v in data.model_dump().items() if v is not None}
-    
-    await db.transactions.update_one({"id": transaction_id}, {"$set": update_data})
-    
-    updated_transaction = await db.transactions.find_one({"id": transaction_id}, {"_id": 0})
-    return updated_transaction
+    if update_data:
+        await db.budget_sheets.update_one({"id": sheet_id}, {"$set": update_data})
+    updated = await db.budget_sheets.find_one({"id": sheet_id}, {"_id": 0})
+    return updated
 
-@api_router.delete("/budget/transactions/{transaction_id}")
-async def delete_transaction(transaction_id: str, user: dict = Depends(get_current_user)):
-    result = await db.transactions.delete_one({"id": transaction_id, "user_id": user["id"]})
-    if result.deleted_count == 0:
-        raise HTTPException(status_code=404, detail="Transaction not found")
-    return {"message": "Transaction deleted"}
+@api_router.delete("/budget/sheets/{sheet_id}")
+async def delete_sheet(sheet_id: str, user: dict = Depends(get_current_user)):
+    sheet = await db.budget_sheets.find_one({"id": sheet_id, "user_id": user["id"]})
+    if not sheet:
+        raise HTTPException(status_code=404, detail="Sheet not found")
+    await db.budget_rows.delete_many({"sheet_id": sheet_id, "user_id": user["id"]})
+    await db.budget_sheets.delete_one({"id": sheet_id})
+    return {"message": "Sheet and all its rows deleted"}
 
-@api_router.get("/budget/summary")
-async def get_budget_summary(user: dict = Depends(get_current_user)):
-    transactions = await db.transactions.find({"user_id": user["id"]}, {"_id": 0}).to_list(1000)
-    
-    total_income = sum(t["amount"] for t in transactions if t["type"] == "income")
-    total_expenses = sum(t["amount"] for t in transactions if t["type"] == "expense")
-    
-    # Category breakdown for expenses
-    expense_by_category = {}
-    for t in transactions:
-        if t["type"] == "expense":
-            cat = t["category"]
-            expense_by_category[cat] = expense_by_category.get(cat, 0) + t["amount"]
-    
-    # Monthly breakdown
-    monthly_data = {}
-    for t in transactions:
-        month = t["date"][:7]  # YYYY-MM
-        if month not in monthly_data:
-            monthly_data[month] = {"income": 0, "expense": 0}
-        monthly_data[month][t["type"]] += t["amount"]
-    
-    initial_balance = user.get("initial_balance", 0.0)
-    
-    return {
-        "total_income": total_income,
-        "total_expenses": total_expenses,
-        "initial_balance": initial_balance,
-        "is_initial_balance_set": user.get("is_initial_balance_set", False),
-        "balance": initial_balance + total_income - total_expenses,
-        "expense_by_category": expense_by_category,
-        "monthly_data": monthly_data
+# --- Row CRUD ---
+
+@api_router.get("/budget/sheets/{sheet_id}/rows")
+async def get_rows(sheet_id: str, user: dict = Depends(get_current_user)):
+    rows = await db.budget_rows.find({"sheet_id": sheet_id, "user_id": user["id"]}, {"_id": 0}).sort("order", 1).to_list(5000)
+    return rows
+
+@api_router.post("/budget/sheets/{sheet_id}/rows")
+async def create_row(sheet_id: str, data: BudgetRowCreate, user: dict = Depends(get_current_user)):
+    sheet = await db.budget_sheets.find_one({"id": sheet_id, "user_id": user["id"]})
+    if not sheet:
+        raise HTTPException(status_code=404, detail="Sheet not found")
+    now = datetime.now(timezone.utc).isoformat()
+    count = await db.budget_rows.count_documents({"sheet_id": sheet_id, "user_id": user["id"]})
+    row_doc = {
+        "id": str(uuid.uuid4()),
+        "sheet_id": sheet_id,
+        "user_id": user["id"],
+        "date": data.date,
+        "description": data.description,
+        "credit": data.credit,
+        "debit": data.debit,
+        "order": count,
+        "created_at": now
     }
+    await db.budget_rows.insert_one(row_doc)
+    row_doc.pop('_id', None)
+    return row_doc
+
+@api_router.put("/budget/rows/{row_id}")
+async def update_row(row_id: str, data: BudgetRowUpdate, user: dict = Depends(get_current_user)):
+    row = await db.budget_rows.find_one({"id": row_id, "user_id": user["id"]})
+    if not row:
+        raise HTTPException(status_code=404, detail="Row not found")
+    update_data = {k: v for k, v in data.model_dump().items() if v is not None}
+    if update_data:
+        await db.budget_rows.update_one({"id": row_id}, {"$set": update_data})
+    updated = await db.budget_rows.find_one({"id": row_id}, {"_id": 0})
+    return updated
+
+@api_router.delete("/budget/rows/{row_id}")
+async def delete_row(row_id: str, user: dict = Depends(get_current_user)):
+    result = await db.budget_rows.delete_one({"id": row_id, "user_id": user["id"]})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Row not found")
+    return {"message": "Row deleted"}
+
+# --- Import / Export ---
+
+@api_router.post("/budget/sheets/{sheet_id}/import")
+async def import_sheet_csv(sheet_id: str, file: UploadFile = File(...), user: dict = Depends(get_current_user)):
+    """Import CSV into a sheet. Columns: date, source/description, debit, credit"""
+    sheet = await db.budget_sheets.find_one({"id": sheet_id, "user_id": user["id"]})
+    if not sheet:
+        raise HTTPException(status_code=404, detail="Sheet not found")
+    try:
+        content = await file.read()
+        try:
+            text = content.decode('utf-8-sig')
+        except UnicodeDecodeError:
+            text = content.decode('latin-1')
+        
+        reader = csv.DictReader(io.StringIO(text))
+        
+        imported = 0
+        now = datetime.now(timezone.utc).isoformat()
+        current_order = await db.budget_rows.count_documents({"sheet_id": sheet_id, "user_id": user["id"]})
+        
+        for row in reader:
+            row = {k.strip().lower(): v.strip() for k, v in row.items() if k}
+            
+            raw_date = row.get('date', '').strip()
+            description = row.get('source', row.get('description', '')).strip()
+            
+            debit_str = row.get('debit', '').replace(',', '').strip()
+            credit_str = row.get('credit', '').replace(',', '').strip()
+            
+            debit = 0
+            credit = 0
+            try:
+                debit = float(debit_str) if debit_str else 0
+            except ValueError:
+                pass
+            try:
+                credit = float(credit_str) if credit_str else 0
+            except ValueError:
+                pass
+            
+            if not raw_date and not description and debit == 0 and credit == 0:
+                continue
+            
+            row_doc = {
+                "id": str(uuid.uuid4()),
+                "sheet_id": sheet_id,
+                "user_id": user["id"],
+                "date": raw_date,
+                "description": description,
+                "credit": credit,
+                "debit": debit,
+                "order": current_order + imported,
+                "created_at": now
+            }
+            
+            await db.budget_rows.insert_one(row_doc)
+            imported += 1
+        
+        return {"message": f"Imported {imported} rows", "count": imported}
+    except Exception as e:
+        logger.error(f"CSV import error: {e}")
+        raise HTTPException(status_code=400, detail=f"Failed to parse CSV: {str(e)}")
+
+@api_router.get("/budget/sheets/{sheet_id}/export")
+async def export_sheet_csv(sheet_id: str, user: dict = Depends(get_current_user)):
+    from fastapi.responses import StreamingResponse
+    sheet = await db.budget_sheets.find_one({"id": sheet_id, "user_id": user["id"]})
+    if not sheet:
+        raise HTTPException(status_code=404, detail="Sheet not found")
+    
+    rows = await db.budget_rows.find({"sheet_id": sheet_id, "user_id": user["id"]}, {"_id": 0}).sort("order", 1).to_list(5000)
+    
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["Date", "Description", "Credit", "Debit"])
+    for r in rows:
+        writer.writerow([r.get("date", ""), r.get("description", ""), r.get("credit", 0), r.get("debit", 0)])
+    
+    output.seek(0)
+    filename = f"{sheet['name'].replace(' ', '_')}.csv"
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+
+
 
 # ============ FOCUS ROUTES ============
 
@@ -797,6 +907,116 @@ async def get_focus_stats(user: dict = Depends(get_current_user)):
         "today_sessions": len(today_sessions)
     }
 
+# ============ HABIT ROUTES ============
+
+@api_router.get("/habits", response_model=List[HabitResponse])
+async def get_habits(user: dict = Depends(get_current_user)):
+    """Get all habits for user. Auto-resets completion status if new day."""
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    habits = await db.habits.find({"user_id": user["id"]}, {"_id": 0}).sort("order", 1).to_list(100)
+    
+    updated_habits = []
+    for habit in habits:
+        # Auto-reset if last_completed_date is not today and is_completed is True
+        last_date = habit.get("last_completed_date", "")
+        if habit.get("is_completed", False) and last_date != today:
+            # Reset to pending (new day)
+            await db.habits.update_one(
+                {"id": habit["id"]},
+                {"$set": {"is_completed": False}}
+            )
+            habit["is_completed"] = False
+        updated_habits.append(habit)
+    
+    return updated_habits
+
+@api_router.post("/habits", response_model=HabitResponse)
+async def create_habit(data: HabitCreate, user: dict = Depends(get_current_user)):
+    """Create a new habit."""
+    now = datetime.now(timezone.utc).isoformat()
+    habit_id = str(uuid.uuid4())
+    
+    # Get max order for user's habits
+    max_order_habit = await db.habits.find_one(
+        {"user_id": user["id"]},
+        sort=[("order", -1)]
+    )
+    next_order = (max_order_habit.get("order", 0) + 1) if max_order_habit else 0
+    
+    habit_doc = {
+        "id": habit_id,
+        "user_id": user["id"],
+        "title": data.title,
+        "icon": data.icon or "☀️",
+        "order": data.order if data.order is not None else next_order,
+        "is_completed": False,
+        "last_completed_date": None,
+        "current_streak": 0,
+        "created_at": now
+    }
+    
+    await db.habits.insert_one(habit_doc)
+    return HabitResponse(**habit_doc)
+
+@api_router.put("/habits/{habit_id}", response_model=HabitResponse)
+async def update_habit(habit_id: str, data: HabitUpdate, user: dict = Depends(get_current_user)):
+    """Update a habit. Toggle completion updates streak."""
+    habit = await db.habits.find_one({"id": habit_id, "user_id": user["id"]}, {"_id": 0})
+    if not habit:
+        raise HTTPException(status_code=404, detail="Habit not found")
+    
+    update_data = {}
+    if data.title is not None:
+        update_data["title"] = data.title
+    if data.icon is not None:
+        update_data["icon"] = data.icon
+    if data.order is not None:
+        update_data["order"] = data.order
+    
+    # Handle completion toggle with streak logic
+    if data.is_completed is not None:
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        yesterday = (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%d")
+        
+        if data.is_completed:
+            # Marking as complete
+            update_data["is_completed"] = True
+            update_data["last_completed_date"] = today
+            
+            # Update streak: if last completed was yesterday, increment; otherwise reset to 1
+            last_date = habit.get("last_completed_date", "")
+            if last_date == yesterday:
+                update_data["current_streak"] = habit.get("current_streak", 0) + 1
+            elif last_date != today:
+                update_data["current_streak"] = 1
+        else:
+            # Marking as incomplete (undo)
+            update_data["is_completed"] = False
+    
+    if update_data:
+        await db.habits.update_one({"id": habit_id}, {"$set": update_data})
+    
+    updated_habit = await db.habits.find_one({"id": habit_id}, {"_id": 0})
+    return HabitResponse(**updated_habit)
+
+@api_router.delete("/habits/{habit_id}")
+async def delete_habit(habit_id: str, user: dict = Depends(get_current_user)):
+    """Delete a habit."""
+    result = await db.habits.delete_one({"id": habit_id, "user_id": user["id"]})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Habit not found")
+    return {"message": "Habit deleted"}
+
+@api_router.put("/habits/reorder")
+async def reorder_habits(data: HabitReorder, user: dict = Depends(get_current_user)):
+    """Reorder habits by providing list of habit IDs in desired order."""
+    for index, habit_id in enumerate(data.habit_ids):
+        await db.habits.update_one(
+            {"id": habit_id, "user_id": user["id"]},
+            {"$set": {"order": index}}
+        )
+    return {"message": "Habits reordered"}
+
 # ============ DASHBOARD ROUTES ============
 
 @api_router.get("/dashboard/stats", response_model=DashboardStats)
@@ -842,7 +1062,9 @@ async def get_dashboard_stats(user: dict = Depends(get_current_user)):
         tasks_total_today=len(tasks_today),
         focus_time_today=focus_time_today,
         notes_count=notes_count,
-        weekly_completion_rate=round(weekly_rate, 1)
+        weekly_completion_rate=round(weekly_rate, 1),
+        total_tasks_completed=await db.tasks.count_documents({"user_id": user["id"], "status": "completed"}),
+        total_focus_time=sum(s.get("duration_actual", 0) for s in await db.focus_sessions.find({"user_id": user["id"], "completed_at": {"$ne": None}}, {"_id": 0}).to_list(10000))
     )
 
 @api_router.get("/dashboard/activity", response_model=List[DailyActivityResponse])
@@ -944,6 +1166,15 @@ app.add_middleware(
 # Include router
 app.include_router(api_router)
 
+@app.on_event("startup")
+async def startup_db_client():
+    try:
+        await client.admin.command("ping")
+        logger.info(f"✅ Successfully connected to MongoDB database: '{os.environ['DB_NAME']}'")
+    except Exception as e:
+        logger.error(f"❌ Failed to connect to MongoDB: {e}")
+
 @app.on_event("shutdown")
 async def shutdown_db_client():
     client.close()
+    logger.info("🔌 MongoDB connection closed")

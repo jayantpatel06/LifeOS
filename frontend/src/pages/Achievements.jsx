@@ -129,13 +129,7 @@ export const Achievements = () => {
   }
 
   return (
-    <div className="space-y-6" data-testid="achievements-page">
-      {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold font-['Outfit'] tracking-tight">Achievements</h1>
-        <p className="text-muted-foreground mt-1">Track your progress and unlock rewards</p>
-      </div>
-
+    <div className="space-y-4" data-testid="achievements-page">
       {/* Overview Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <motion.div

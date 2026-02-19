@@ -157,20 +157,14 @@ export const FocusTimer = () => {
   const Icon = config.icon;
 
   return (
-    <div className="space-y-6" data-testid="focus-page">
-      {/* Header */}
-      <div className="text-center">
-        <h1 className="text-3xl font-bold font-['Outfit'] tracking-tight">Focus Timer</h1>
-        <p className="text-muted-foreground mt-1">Stay productive with the Pomodoro Technique</p>
-      </div>
-
-      <div className="flex flex-col lg:flex-row gap-6 items-start">
+    <div className="space-y-4" data-testid="focus-page">
+      <div className="flex flex-col lg:flex-row gap-4 items-start">
         {/* Timer */}
         <div className="w-full lg:flex-1">
           <Card className={`w-full border-${config.color}-500/20 bg-gradient-to-br from-card to-${config.color}-950/10`} data-testid="timer-card">
-            <CardContent className="p-8">
+            <CardContent className="p-10">
               {/* Mode Selector */}
-              <div className="flex justify-center gap-2 mb-8">
+              <div className="flex justify-center gap-2 mb-6">
                 {Object.entries(TIMER_PRESETS).map(([key, preset]) => (
                   <Button
                     key={key}
@@ -195,30 +189,30 @@ export const FocusTimer = () => {
               </div>
 
               {/* Timer Display */}
-              <div className="relative w-64 h-64 mx-auto mb-8">
+              <div className="relative w-48 h-48 mx-auto mb-6">
                 <svg className="w-full h-full transform -rotate-90">
                   <circle
-                    cx="128"
-                    cy="128"
-                    r="120"
+                    cx="96"
+                    cy="96"
+                    r="88"
                     fill="none"
                     stroke="currentColor"
-                    strokeWidth="8"
+                    strokeWidth="6"
                     className="text-muted/30"
                   />
                   <motion.circle
-                    cx="128"
-                    cy="128"
-                    r="120"
+                    cx="96"
+                    cy="96"
+                    r="88"
                     fill="none"
                     stroke="currentColor"
-                    strokeWidth="8"
+                    strokeWidth="6"
                     strokeLinecap="round"
                     className={`text-${config.color}-500`}
-                    strokeDasharray={2 * Math.PI * 120}
-                    strokeDashoffset={2 * Math.PI * 120 * (1 - progress / 100)}
+                    strokeDasharray={2 * Math.PI * 88}
+                    strokeDashoffset={2 * Math.PI * 88 * (1 - progress / 100)}
                     initial={false}
-                    animate={{ strokeDashoffset: 2 * Math.PI * 120 * (1 - progress / 100) }}
+                    animate={{ strokeDashoffset: 2 * Math.PI * 88 * (1 - progress / 100) }}
                     transition={{ duration: 0.5 }}
                   />
                 </svg>
@@ -228,7 +222,7 @@ export const FocusTimer = () => {
                     key={timeLeft}
                     initial={{ scale: 1.1, opacity: 0 }}
                     animate={{ scale: 1, opacity: 1 }}
-                    className="text-6xl font-bold font-mono"
+                    className="text-4xl font-bold font-mono"
                     data-testid="timer-display"
                   >
                     {formatTime(timeLeft)}
@@ -278,17 +272,6 @@ export const FocusTimer = () => {
                   <RotateCcw className="w-5 h-5" /> Reset
                 </Button>
               </div>
-
-              {/* Session Info */}
-              {currentSession && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="mt-6 text-center text-sm text-muted-foreground"
-                >
-                  Session in progress...
-                </motion.div>
-              )}
             </CardContent>
           </Card>
         </div>
@@ -301,11 +284,11 @@ export const FocusTimer = () => {
             transition={{ delay: 0.1 }}
           >
             <Card data-testid="today-focus-stat">
-              <CardContent className="p-6">
+              <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-muted-foreground">Today</p>
-                    <p className="text-2xl font-bold font-mono mt-1">
+                    <p className="text-s text-muted-foreground">Today</p>
+                    <p className="text-lg font-bold font-mono mt-0.5">
                       {Math.floor((stats?.today_focus_time || 0) / 60)}h {(stats?.today_focus_time || 0) % 60}m
                     </p>
                   </div>
@@ -323,11 +306,11 @@ export const FocusTimer = () => {
             transition={{ delay: 0.2 }}
           >
             <Card data-testid="sessions-today-stat">
-              <CardContent className="p-6">
+              <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-muted-foreground">Sessions Today</p>
-                    <p className="text-2xl font-bold font-mono mt-1">{stats?.today_sessions || 0}</p>
+                    <p className="text-s text-muted-foreground">Sessions Today</p>
+                    <p className="text-lg font-bold font-mono mt-0.5">{stats?.today_sessions || 0}</p>
                   </div>
                   <div className="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center">
                     <Target className="w-5 h-5 text-emerald-500" />
@@ -343,11 +326,11 @@ export const FocusTimer = () => {
             transition={{ delay: 0.3 }}
           >
             <Card data-testid="total-focus-stat">
-              <CardContent className="p-6">
+              <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-muted-foreground">Total Focus</p>
-                    <p className="text-2xl font-bold font-mono mt-1">
+                    <p className="text-s text-muted-foreground">Total Focus</p>
+                    <p className="text-lg font-bold font-mono mt-0.5">
                       {Math.floor((stats?.total_focus_time || 0) / 60)}h
                     </p>
                   </div>
@@ -365,11 +348,11 @@ export const FocusTimer = () => {
             transition={{ delay: 0.4 }}
           >
             <Card data-testid="completion-rate-stat">
-              <CardContent className="p-6">
+              <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-muted-foreground">Completion Rate</p>
-                    <p className="text-2xl font-bold font-mono mt-1">
+                    <p className="text-s text-muted-foreground">Completion Rate</p>
+                    <p className="text-lg font-bold font-mono mt-0.5">
                       {stats?.completion_rate?.toFixed(0) || 0}%
                     </p>
                   </div>

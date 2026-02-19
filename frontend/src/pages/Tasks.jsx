@@ -124,6 +124,16 @@ export const Tasks = () => {
     }
   };
 
+  const handleReopen = async (task) => {
+    try {
+      await api.put(`/tasks/${task.id}`, { status: 'pending' });
+      toast.success('Task reopened');
+      fetchTasks();
+    } catch (error) {
+      toast.error('Failed to reopen task');
+    }
+  };
+
   const handleEdit = (task) => {
     setEditingTask(task);
     setTitle(task.title);
@@ -159,12 +169,12 @@ export const Tasks = () => {
       >
         <div className="flex items-start gap-3">
           <button
-            onClick={() => task.status !== 'completed' && handleComplete(task)}
+            onClick={() => task.status === 'completed' ? handleReopen(task) : handleComplete(task)}
             className="mt-1 flex-shrink-0"
             data-testid={`task-complete-btn-${task.id}`}
           >
             {task.status === 'completed' ? (
-              <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+              <CheckCircle2 className="w-5 h-5 text-emerald-500 hover:text-emerald-400 transition-colors" />
             ) : (
               <Circle className="w-5 h-5 text-muted-foreground hover:text-primary transition-colors" />
             )}
@@ -247,15 +257,12 @@ export const Tasks = () => {
   }
 
   return (
-    <div className="space-y-6" data-testid="tasks-page">
+    <div className="space-y-4" data-testid="tasks-page">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold font-['Outfit'] tracking-tight">Tasks</h1>
-          <p className="text-muted-foreground mt-1">
-            {tasks.filter(t => t.status !== 'completed').length} tasks remaining
-          </p>
-        </div>
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">
+          {tasks.filter(t => t.status !== 'completed').length} tasks remaining
+        </p>
 
         <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetForm(); }}>
           <DialogTrigger asChild>

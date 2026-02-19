@@ -1,225 +1,242 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { Label } from '../components/ui/label';
-import { Badge } from '../components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
-import { ScrollArea } from '../components/ui/scroll-area';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../components/ui/dropdown-menu';
 import { toast } from 'sonner';
 import {
-  Plus, TrendingUp, TrendingDown, Wallet, DollarSign, MoreVertical, Trash2, Edit,
-  ShoppingCart, Car, Utensils, Home, Heart, GraduationCap, Film, Briefcase, PiggyBank,
-  CreditCard, ArrowUpRight, ArrowDownRight, Filter
+  Plus, Upload, Download, Trash2, Check, X, FileSpreadsheet,
+  MoreHorizontal, Pencil, ChevronUp, ChevronDown
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { format } from 'date-fns';
-
-const expenseCategories = [
-  { value: 'food', label: 'Food & Dining', icon: Utensils, color: '#F97316' },
-  { value: 'transport', label: 'Transportation', icon: Car, color: '#3B82F6' },
-  { value: 'shopping', label: 'Shopping', icon: ShoppingCart, color: '#EC4899' },
-  { value: 'entertainment', label: 'Entertainment', icon: Film, color: '#8B5CF6' },
-  { value: 'bills', label: 'Bills & Utilities', icon: Home, color: '#EF4444' },
-  { value: 'healthcare', label: 'Healthcare', icon: Heart, color: '#10B981' },
-  { value: 'education', label: 'Education', icon: GraduationCap, color: '#06B6D4' },
-  { value: 'other', label: 'Other', icon: CreditCard, color: '#6B7280' },
-];
-
-const incomeCategories = [
-  { value: 'salary', label: 'Salary', icon: Briefcase, color: '#10B981' },
-  { value: 'freelance', label: 'Freelance', icon: DollarSign, color: '#3B82F6' },
-  { value: 'investment', label: 'Investment', icon: TrendingUp, color: '#8B5CF6' },
-  { value: 'gift', label: 'Gift', icon: Heart, color: '#EC4899' },
-  { value: 'savings', label: 'Savings Return', icon: PiggyBank, color: '#F97316' },
-  { value: 'other', label: 'Other', icon: Wallet, color: '#6B7280' },
-];
-
-const getCategoryConfig = (type, categoryValue) => {
-  const categories = type === 'income' ? incomeCategories : expenseCategories;
-  return categories.find(c => c.value === categoryValue) || categories[categories.length - 1];
-};
 
 export const Budget = () => {
-  const { api, user, refreshUser } = useAuth();
-  const [transactions, setTransactions] = useState([]);
-  const [summary, setSummary] = useState(null);
+  const { api } = useAuth();
+  const [sheets, setSheets] = useState([]);
+  const [activeSheetId, setActiveSheetId] = useState(null);
+  const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showOverview, setShowOverview] = useState(false);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [editingTransaction, setEditingTransaction] = useState(null);
+  const [editingCell, setEditingCell] = useState(null); // { rowId, field }
+  const [editValue, setEditValue] = useState('');
+  const [newRow, setNewRow] = useState(null);
+  const [newSheetDialog, setNewSheetDialog] = useState(false);
+  const [newSheetName, setNewSheetName] = useState('');
+  const [renameDialog, setRenameDialog] = useState(null); // sheet obj
+  const [renameName, setRenameName] = useState('');
+  const [deleteConfirm, setDeleteConfirm] = useState(null); // sheet obj
+  const [sortField, setSortField] = useState(null);
+  const [sortDir, setSortDir] = useState('asc');
+  const csvInputRef = useRef(null);
 
-  // Initial Balance State
-  const [balanceDialogOpen, setBalanceDialogOpen] = useState(false);
-  const [newBalance, setNewBalance] = useState('');
-
-  // Form state
-  const [type, setType] = useState('expense');
-  const [amount, setAmount] = useState('');
-  const [category, setCategory] = useState('other');
-  const [section, setSection] = useState('Personal');
-  const [activeSection, setActiveSection] = useState('Personal');
-  const [filterType, setFilterType] = useState('all');
-  const [description, setDescription] = useState('');
-  const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
-  const [transactionToDelete, setTransactionToDelete] = useState(null);
-
-  const SECTIONS = ['Personal', 'Salary', 'Other'];
-
-  const fetchData = useCallback(async () => {
+  // Fetch sheets
+  const fetchSheets = useCallback(async () => {
     try {
-      const [transactionsRes, summaryRes] = await Promise.all([
-        api.get('/budget/transactions'),
-        api.get('/budget/summary')
-      ]);
-      setTransactions(transactionsRes.data);
-      setSummary(summaryRes.data);
-      refreshUser();
+      const res = await api.get('/budget/sheets');
+      setSheets(res.data);
+      if (res.data.length > 0 && !activeSheetId) {
+        setActiveSheetId(res.data[0].id);
+      }
     } catch (error) {
-      toast.error('Failed to fetch budget data');
+      toast.error('Failed to load sheets');
     } finally {
       setLoading(false);
     }
-  }, [api, refreshUser]);
+  }, [api, activeSheetId]);
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  // Fetch rows for active sheet
+  const fetchRows = useCallback(async () => {
+    if (!activeSheetId) { setRows([]); return; }
+    try {
+      const res = await api.get(`/budget/sheets/${activeSheetId}/rows`);
+      setRows(res.data);
+    } catch (error) {
+      toast.error('Failed to load rows');
+    }
+  }, [api, activeSheetId]);
 
-  const resetForm = () => {
-    setType('expense');
-    setAmount('');
-    setCategory('other');
-    setSection('Personal');
-    setDescription('');
-    setDate(format(new Date(), 'yyyy-MM-dd'));
-    setEditingTransaction(null);
+  useEffect(() => { fetchSheets(); }, [fetchSheets]);
+  useEffect(() => { fetchRows(); }, [activeSheetId, fetchRows]);
+
+  // --- Sheet actions ---
+  const createSheet = async () => {
+    if (!newSheetName.trim()) return;
+    try {
+      const res = await api.post('/budget/sheets', { name: newSheetName.trim() });
+      setSheets(prev => [...prev, res.data]);
+      setActiveSheetId(res.data.id);
+      setNewSheetName('');
+      setNewSheetDialog(false);
+      toast.success(`Sheet "${res.data.name}" created`);
+    } catch (error) {
+      toast.error('Failed to create sheet');
+    }
   };
 
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    const transactionData = {
-      type,
-      amount: parseFloat(amount),
-      category,
-      section,
-      description,
-      date,
-      is_recurring: false
-    };
-
+  const renameSheet = async () => {
+    if (!renameName.trim() || !renameDialog) return;
     try {
-      if (editingTransaction) {
-        await api.put(`/budget/transactions/${editingTransaction.id}`, transactionData);
-        toast.success('Transaction updated!');
-      } else {
-        await api.post('/budget/transactions', transactionData);
-        toast.success('Transaction added!');
+      await api.put(`/budget/sheets/${renameDialog.id}`, { name: renameName.trim() });
+      setSheets(prev => prev.map(s => s.id === renameDialog.id ? { ...s, name: renameName.trim() } : s));
+      setRenameDialog(null);
+      toast.success('Sheet renamed');
+    } catch (error) {
+      toast.error('Failed to rename sheet');
+    }
+  };
+
+  const deleteSheet = async () => {
+    if (!deleteConfirm) return;
+    try {
+      await api.delete(`/budget/sheets/${deleteConfirm.id}`);
+      const remaining = sheets.filter(s => s.id !== deleteConfirm.id);
+      setSheets(remaining);
+      if (activeSheetId === deleteConfirm.id) {
+        setActiveSheetId(remaining.length > 0 ? remaining[0].id : null);
       }
-      fetchData();
-      setDialogOpen(false);
-      resetForm();
+      setDeleteConfirm(null);
+      toast.success('Sheet deleted');
     } catch (error) {
-      toast.error('Failed to save transaction');
+      toast.error('Failed to delete sheet');
     }
   };
 
-  const handleUpdateBalance = async (e) => {
-    e.preventDefault();
+  // --- Row actions ---
+  const startNewRow = () => {
+    setNewRow({ date: '', description: '', credit: '', debit: '' });
+  };
+
+  const saveNewRow = async () => {
+    if (!activeSheetId) return;
     try {
-      await api.put('/auth/balance', { initial_balance: parseFloat(newBalance) });
-      toast.success('Initial balance updated');
-      setBalanceDialogOpen(false);
-      refreshUser();
-      fetchData(); // specificallt to re-calculate summary balance if needed, though summary relies on transactions + init balance logic
+      const res = await api.post(`/budget/sheets/${activeSheetId}/rows`, {
+        date: newRow.date,
+        description: newRow.description,
+        credit: parseFloat(newRow.credit) || 0,
+        debit: parseFloat(newRow.debit) || 0,
+      });
+      setRows(prev => [...prev, res.data]);
+      setNewRow(null);
     } catch (error) {
-      toast.error('Failed to update balance');
+      toast.error('Failed to add row');
     }
   };
 
-  const handleDelete = async (transactionId) => {
+  const deleteRow = async (rowId) => {
     try {
-      await api.delete(`/budget/transactions/${transactionId}`);
-      toast.success('Transaction deleted');
-      fetchData();
+      await api.delete(`/budget/rows/${rowId}`);
+      setRows(prev => prev.filter(r => r.id !== rowId));
     } catch (error) {
-      toast.error('Failed to delete transaction');
+      toast.error('Failed to delete row');
     }
   };
 
-  const handleEdit = (transaction) => {
-    setEditingTransaction(transaction);
-    setType(transaction.type);
-    setAmount(transaction.amount.toString());
-    setCategory(transaction.category);
-    setSection(transaction.section || 'Personal');
-    setDescription(transaction.description || '');
-    setDate(transaction.date);
-    setDialogOpen(true);
+  // --- Inline editing ---
+  const startEdit = (rowId, field, currentValue) => {
+    setEditingCell({ rowId, field });
+    setEditValue(currentValue?.toString() || '');
   };
 
+  const cancelEdit = () => { setEditingCell(null); setEditValue(''); };
 
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    }).format(amount);
+  const saveEdit = async () => {
+    if (!editingCell) return;
+    const { rowId, field } = editingCell;
+    let value = editValue;
+    if (field === 'credit' || field === 'debit') {
+      value = parseFloat(editValue) || 0;
+    }
+    try {
+      await api.put(`/budget/rows/${rowId}`, { [field]: value });
+      setRows(prev => prev.map(r => r.id === rowId ? { ...r, [field]: value } : r));
+      cancelEdit();
+    } catch (error) {
+      toast.error('Failed to update');
+    }
   };
 
-  const TransactionCard = ({ transaction }) => {
-    const config = getCategoryConfig(transaction.type, transaction.category);
-    const Icon = config.icon;
-    const isIncome = transaction.type === 'income';
-
-    return (
-      <div className="group relative flex items-center gap-3 p-3 mb-2 rounded-lg bg-card/50 border border-border/50 hover:border-primary/30 transition-all overflow-hidden">
-        {/* Left Side Actions (Visible on Hover) */}
-        <div className="absolute left-0 top-0 bottom-0 flex items-center gap-1 px-2 bg-gradient-to-r from-card via-card/95 to-transparent opacity-0 group-hover:opacity-100 transition-all z-10 translate-x-[-100%] group-hover:translate-x-0">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-primary hover:bg-primary/10"
-            onClick={() => handleEdit(transaction)}
-          >
-            <Edit className="w-3.5 h-3.5" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-destructive hover:bg-destructive/10"
-            onClick={() => setTransactionToDelete(transaction)}
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </Button>
-        </div>
-
-        {/* Regular Content */}
-        <div className="flex items-center gap-3 flex-1 group-hover:pl-16 transition-all duration-300">
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: `${config.color}20` }}>
-            <Icon className="w-4 h-4" style={{ color: config.color }} />
-          </div>
-          <div className="overflow-hidden">
-            <p className="font-medium text-sm truncate">{transaction.description || '__'}</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">{format(new Date(transaction.date), 'MMM d, yyyy')}</p>
-          </div>
-        </div>
-        <div className="text-right">
-          <p className={`font-bold font-mono text-sm ${isIncome ? 'text-emerald-500' : 'text-red-500'}`}>
-            {isIncome ? '+' : '-'}{formatCurrency(transaction.amount).replace('₹', '')}
-          </p>
-          <p className="text-[10px] text-muted-foreground uppercase tracking-tight opacity-50">{transaction.category}</p>
-        </div>
-      </div>
-    );
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') saveEdit();
+    if (e.key === 'Escape') cancelEdit();
   };
 
+  const handleNewRowKeyDown = (e) => {
+    if (e.key === 'Enter') saveNewRow();
+    if (e.key === 'Escape') setNewRow(null);
+  };
+
+  // --- CSV Import / Export ---
+  const handleCsvImport = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !activeSheetId) return;
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+      const res = await api.post(`/budget/sheets/${activeSheetId}/import`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      toast.success(res.data.message);
+      fetchRows();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Import failed');
+    }
+    e.target.value = '';
+  };
+
+  const handleCsvExport = async () => {
+    if (!activeSheetId) return;
+    try {
+      const res = await api.get(`/budget/sheets/${activeSheetId}/export`, { responseType: 'blob' });
+      const activeSheet = sheets.find(s => s.id === activeSheetId);
+      const url = URL.createObjectURL(new Blob([res.data]));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${activeSheet?.name || 'sheet'}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      toast.error('Export failed');
+    }
+  };
+
+  // --- Sorting ---
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDir('asc');
+    }
+  };
+
+  const SortIcon = ({ field }) => {
+    if (sortField !== field) return null;
+    return sortDir === 'asc'
+      ? <ChevronUp className="w-3 h-3 inline ml-0.5" />
+      : <ChevronDown className="w-3 h-3 inline ml-0.5" />;
+  };
+
+  const sortedRows = [...rows].sort((a, b) => {
+    if (!sortField) return 0;
+    let cmp = 0;
+    if (sortField === 'date' || sortField === 'description') {
+      cmp = (a[sortField] || '').localeCompare(b[sortField] || '');
+    } else {
+      cmp = (a[sortField] || 0) - (b[sortField] || 0);
+    }
+    return sortDir === 'asc' ? cmp : -cmp;
+  });
+
+  // --- Totals ---
+  const totalCredit = rows.reduce((s, r) => s + (r.credit || 0), 0);
+  const totalDebit = rows.reduce((s, r) => s + (r.debit || 0), 0);
+
+  const formatNum = (n) => {
+    if (!n && n !== 0) return '';
+    return new Intl.NumberFormat('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(n);
+  };
+
+  const activeSheet = sheets.find(s => s.id === activeSheetId);
 
   if (loading) {
     return (
@@ -230,236 +247,287 @@ export const Budget = () => {
   }
 
   return (
-    <div className="space-y-6" data-testid="budget-page">
+    <div className="flex flex-col h-[calc(100vh-80px)]" data-testid="budget-page">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold font-['Outfit'] tracking-tight">Budget</h1>
-          <p className="text-muted-foreground mt-1">Track income & expenses</p>
-        </div>
-        <div className="flex gap-3">
-          <Button
-            variant="outline"
-            onClick={() => setShowOverview(!showOverview)}
-            className={showOverview ? "bg-primary/10 text-primary border-primary/20" : ""}
-          >
-            {showOverview ? 'Hide Overview' : 'Overview'}
-          </Button>
-
-          <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetForm(); }}>
-            <DialogTrigger asChild>
-              <Button className="gap-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white shadow-lg shadow-cyan-500/20">
-                <Plus className="w-4 h-4" /> Add Transaction
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[500px]">
-              <DialogHeader>
-                <DialogTitle>{editingTransaction ? 'Edit Transaction' : 'Add Transaction'}</DialogTitle>
-              </DialogHeader>
-              <form onSubmit={handleSubmit} className="space-y-4 mt-4">
-                <div className="flex gap-2">
-                  <Button type="button" variant={type === 'expense' ? 'default' : 'outline'} className={type === 'expense' ? 'bg-red-600 hover:bg-red-700' : ''} onClick={() => { setType('expense'); setCategory('other'); }}>
-                    <ArrowDownRight className="w-4 h-4 mr-2" /> Expense
-                  </Button>
-                  <Button type="button" variant={type === 'income' ? 'default' : 'outline'} className={type === 'income' ? 'bg-emerald-600 hover:bg-emerald-700' : ''} onClick={() => { setType('income'); setCategory('other'); }}>
-                    <ArrowUpRight className="w-4 h-4 mr-2" /> Income
-                  </Button>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Section</Label>
-                  <Select value={section} onValueChange={setSection}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {SECTIONS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Amount</Label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-cyan-400 text-sm">{formatCurrency(0).charAt(0)}</span>
-                    <Input type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder={formatCurrency(0).replace('₹', '')} className="pl-10" required />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Category</Label>
-                  <Select value={category} onValueChange={setCategory}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {(type === 'income' ? incomeCategories : expenseCategories).map(cat => (
-                        <SelectItem key={cat.value} value={cat.value}>
-                          <div className="flex items-center gap-2"><cat.icon className="w-4 h-4" style={{ color: cat.color }} />{cat.label}</div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Description</Label>
-                  <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Description" />
-                </div>
-                <div className="space-y-2">
-                  <Label>Date</Label>
-                  <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
-                </div>
-                <div className="flex justify-end gap-3 pt-4">
-                  <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-                  <Button type="submit" className="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white">Save</Button>
-                </div>
-              </form>
-            </DialogContent>
-          </Dialog>
-        </div>
+      <div className="flex items-center justify-between px-1 pb-2">
+        <p className="text-sm text-muted-foreground">
+          {activeSheet ? activeSheet.name : 'Create a sheet to start'}
+        </p>
+        {activeSheetId && (
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => csvInputRef.current?.click()} className="gap-1.5">
+              <Upload className="w-3.5 h-3.5" /> Import
+            </Button>
+            <input ref={csvInputRef} type="file" accept=".csv,.xlsx,.xls" onChange={handleCsvImport} className="hidden" />
+            <Button variant="outline" size="sm" onClick={handleCsvExport} className="gap-1.5">
+              <Download className="w-3.5 h-3.5" /> Export
+            </Button>
+          </div>
+        )}
       </div>
 
-      <AnimatePresence>
-        {showOverview && (
-          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden space-y-6">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <Card className="border-emerald-500/20 bg-gradient-to-br from-card to-emerald-950/20">
-                <CardContent className="p-6">
-                  <p className="text-sm text-muted-foreground">Total Income</p>
-                  <p className="text-2xl font-bold font-mono text-emerald-500 mt-1">{formatCurrency(summary?.total_income || 0)}</p>
-                </CardContent>
-              </Card>
-              <Card className="border-red-500/20 bg-gradient-to-br from-card to-red-950/20">
-                <CardContent className="p-6">
-                  <p className="text-sm text-muted-foreground">Total Expenses</p>
-                  <p className="text-2xl font-bold font-mono text-red-500 mt-1">{formatCurrency(summary?.total_expenses || 0)}</p>
-                </CardContent>
-              </Card>
-              <Card className="border-violet-500/20 bg-gradient-to-br from-card to-violet-950/20">
-                <CardContent className="p-6 relative">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <p className="text-sm text-muted-foreground">Current Balance</p>
-                      <p className="text-2xl font-bold font-mono text-violet-500 mt-1">{formatCurrency(summary?.balance || 0)}</p>
-                      <p className="text-xs text-muted-foreground mt-1">Initial: {formatCurrency(summary?.initial_balance || 0)}</p>
-                    </div>
-                    {/* Only show edit button if initial balance hasn't been set yet (or user just registered and it's 0/unset) 
-                        Note: Backend now enforces one-time set. We check the flag from user object or summary if available 
-                    */}
-                    {(!summary?.is_initial_balance_set && !user?.is_initial_balance_set) && (
-                      <Dialog open={balanceDialogOpen} onOpenChange={setBalanceDialogOpen}>
-                        <DialogTrigger asChild>
-                          <Button variant="ghost" size="icon" onClick={() => setNewBalance(summary?.initial_balance?.toString())}><Edit className="w-4 h-4" /></Button>
-                        </DialogTrigger>
-                        <DialogContent>
-                          <DialogHeader><DialogTitle>Set Initial Balance</DialogTitle></DialogHeader>
-                          <form onSubmit={handleUpdateBalance} className="space-y-4">
-                            <Input type="number" step="0.01" value={newBalance} onChange={(e) => setNewBalance(e.target.value)} placeholder={formatCurrency(0).replace('₹', '')} />
-                            <Button type="submit" className="w-full">Update (Once Only)</Button>
-                          </form>
-                        </DialogContent>
-                      </Dialog>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
+      {/* Spreadsheet Area */}
+      <div className="flex-1 border border-border/50 rounded-lg overflow-hidden flex flex-col bg-card/30">
+        {activeSheetId ? (
+          <>
+            {/* Table */}
+            <div className="flex-1 overflow-auto">
+              <table className="w-full budget-table">
+                <thead>
+                  <tr className="bg-muted/60 sticky top-0 z-10">
+                    <th className="budget-th w-10 text-center">#</th>
+                    <th className="budget-th w-[140px] cursor-pointer select-none" onClick={() => handleSort('date')}>
+                      Date <SortIcon field="date" />
+                    </th>
+                    <th className="budget-th cursor-pointer select-none" onClick={() => handleSort('description')}>
+                      Description <SortIcon field="description" />
+                    </th>
+                    <th className="budget-th w-[130px] text-right cursor-pointer select-none" onClick={() => handleSort('credit')}>
+                      Credit <SortIcon field="credit" />
+                    </th>
+                    <th className="budget-th w-[130px] text-right cursor-pointer select-none" onClick={() => handleSort('debit')}>
+                      Debit <SortIcon field="debit" />
+                    </th>
+                    <th className="budget-th w-[50px]"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedRows.length === 0 && !newRow && (
+                    <tr>
+                      <td colSpan={6} className="text-center py-16 text-muted-foreground/40">
+                        <FileSpreadsheet className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                        <p className="text-sm">Empty sheet</p>
+                        <p className="text-xs mt-1">Import a CSV or add rows manually</p>
+                        <div className="flex gap-2 justify-center mt-4">
+                          <Button variant="outline" size="sm" onClick={() => csvInputRef.current?.click()} className="gap-1.5">
+                            <Upload className="w-3.5 h-3.5" /> Import CSV
+                          </Button>
+                          <Button size="sm" onClick={startNewRow} className="gap-1.5 bg-gradient-to-r from-cyan-600 to-blue-600 text-white">
+                            <Plus className="w-3.5 h-3.5" /> Add Row
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  {sortedRows.map((r, idx) => (
+                    <tr key={r.id} className={`budget-row group ${idx % 2 === 0 ? 'bg-card/20' : ''}`}>
+                      <td className="budget-td text-center text-muted-foreground/40 text-xs font-mono">{idx + 1}</td>
+                      {/* Date */}
+                      <td className="budget-td">
+                        {editingCell?.rowId === r.id && editingCell?.field === 'date' ? (
+                          <input type="text" value={editValue} onChange={e => setEditValue(e.target.value)}
+                            onKeyDown={handleKeyDown} onBlur={saveEdit} className="budget-cell-input" autoFocus />
+                        ) : (
+                          <span className="cursor-pointer hover:text-primary text-sm" onClick={() => startEdit(r.id, 'date', r.date)}>
+                            {r.date || <span className="text-muted-foreground/30">—</span>}
+                          </span>
+                        )}
+                      </td>
+                      {/* Description */}
+                      <td className="budget-td">
+                        {editingCell?.rowId === r.id && editingCell?.field === 'description' ? (
+                          <input type="text" value={editValue} onChange={e => setEditValue(e.target.value)}
+                            onKeyDown={handleKeyDown} onBlur={saveEdit} className="budget-cell-input" autoFocus />
+                        ) : (
+                          <span className="cursor-pointer hover:text-primary text-sm" onClick={() => startEdit(r.id, 'description', r.description)}>
+                            {r.description || <span className="text-muted-foreground/30">—</span>}
+                          </span>
+                        )}
+                      </td>
+                      {/* Credit */}
+                      <td className="budget-td text-right">
+                        {editingCell?.rowId === r.id && editingCell?.field === 'credit' ? (
+                          <input type="number" step="1" value={editValue} onChange={e => setEditValue(e.target.value)}
+                            onKeyDown={handleKeyDown} onBlur={saveEdit} className="budget-cell-input text-right" autoFocus />
+                        ) : (
+                          <span className={`cursor-pointer font-mono text-sm ${r.credit > 0 ? 'text-emerald-500' : 'text-muted-foreground/30'}`}
+                            onClick={() => startEdit(r.id, 'credit', r.credit)}>
+                            {r.credit > 0 ? formatNum(r.credit) : '—'}
+                          </span>
+                        )}
+                      </td>
+                      {/* Debit */}
+                      <td className="budget-td text-right">
+                        {editingCell?.rowId === r.id && editingCell?.field === 'debit' ? (
+                          <input type="number" step="1" value={editValue} onChange={e => setEditValue(e.target.value)}
+                            onKeyDown={handleKeyDown} onBlur={saveEdit} className="budget-cell-input text-right" autoFocus />
+                        ) : (
+                          <span className={`cursor-pointer font-mono text-sm ${r.debit > 0 ? 'text-red-500' : 'text-muted-foreground/30'}`}
+                            onClick={() => startEdit(r.id, 'debit', r.debit)}>
+                            {r.debit > 0 ? formatNum(r.debit) : '—'}
+                          </span>
+                        )}
+                      </td>
+                      {/* Actions */}
+                      <td className="budget-td text-center">
+                        <Button variant="ghost" size="icon"
+                          className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive hover:bg-destructive/10"
+                          onClick={() => deleteRow(r.id)}>
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+
+                  {/* New Row */}
+                  {newRow && (
+                    <tr className="budget-row bg-primary/5 border-t-2 border-primary/20">
+                      <td className="budget-td text-center text-muted-foreground/40 text-xs font-mono">+</td>
+                      <td className="budget-td">
+                        <input type="text" value={newRow.date} onChange={e => setNewRow({ ...newRow, date: e.target.value })}
+                          placeholder="Date..." className="budget-cell-input" autoFocus onKeyDown={handleNewRowKeyDown} />
+                      </td>
+                      <td className="budget-td">
+                        <input type="text" value={newRow.description} onChange={e => setNewRow({ ...newRow, description: e.target.value })}
+                          placeholder="Description..." className="budget-cell-input" onKeyDown={handleNewRowKeyDown} />
+                      </td>
+                      <td className="budget-td">
+                        <input type="number" step="1" value={newRow.credit} onChange={e => setNewRow({ ...newRow, credit: e.target.value })}
+                          placeholder="0" className="budget-cell-input text-right" onKeyDown={handleNewRowKeyDown} />
+                      </td>
+                      <td className="budget-td">
+                        <input type="number" step="1" value={newRow.debit} onChange={e => setNewRow({ ...newRow, debit: e.target.value })}
+                          placeholder="0" className="budget-cell-input text-right" onKeyDown={handleNewRowKeyDown} />
+                      </td>
+                      <td className="budget-td">
+                        <div className="flex gap-0.5">
+                          <Button variant="ghost" size="icon" className="h-6 w-6 text-emerald-500 hover:bg-emerald-500/10" onClick={saveNewRow}>
+                            <Check className="w-3 h-3" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:bg-muted" onClick={() => setNewRow(null)}>
+                            <X className="w-3 h-3" />
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+
+                {/* Totals Footer */}
+                {rows.length > 0 && (
+                  <tfoot>
+                    <tr className="bg-muted/40 border-t-2 border-border/50">
+                      <td className="budget-td" colSpan={3}>
+                        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Total ({rows.length} rows)</span>
+                      </td>
+                      <td className="budget-td text-right">
+                        <span className="font-mono font-bold text-sm text-emerald-500">{formatNum(totalCredit)}</span>
+                      </td>
+                      <td className="budget-td text-right">
+                        <span className="font-mono font-bold text-sm text-red-500">{formatNum(totalDebit)}</span>
+                      </td>
+                      <td className="budget-td"></td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
             </div>
 
-
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Main Content: Sections */}
-      <div className="space-y-6">
-        {/* Section Tabs */}
-        {/* Active Section Content */}
-        <Card className="overflow-hidden border-border/50">
-          <div className="bg-muted/30 px-6 py-4 border-b border-border/50 flex items-center justify-between">
-            <div className="flex justify-center gap-2">
-              {SECTIONS.map((sec) => (
-                <Button
-                  key={sec}
-                  variant={activeSection === sec ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setActiveSection(sec)}
-                  className={
-                    activeSection === sec
-                      ? sec === 'Personal'
-                        ? 'bg-violet-600 hover:bg-violet-700'
-                        : sec === 'Salary'
-                          ? 'bg-emerald-600 hover:bg-emerald-700'
-                          : 'bg-blue-600 hover:bg-blue-700'
-                      : ''
-                  }
-                >
-                  {sec}
+            {/* Add Row Bar */}
+            {!newRow && (
+              <div className="bg-muted/30 px-4 py-2 border-t border-border/50 flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">{rows.length} row{rows.length !== 1 ? 's' : ''}</span>
+                <Button variant="ghost" size="sm" onClick={startNewRow} className="text-xs text-muted-foreground hover:text-foreground gap-1">
+                  <Plus className="w-3 h-3" /> Add row
                 </Button>
-              ))}
-            </div>
-
-            <div className="flex items-center gap-3">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
-                    <Filter className="w-4 h-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => setFilterType('all')} className={filterType === 'all' ? 'bg-accent' : ''}>All</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setFilterType('income')} className={filterType === 'income' ? 'bg-accent' : ''}>Income</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setFilterType('expense')} className={filterType === 'expense' ? 'bg-accent' : ''}>Expense</DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-
-              <div className={`px-2 py-1 rounded text-sm font-mono font-bold ${(transactions.filter(t => (t.section || 'Personal') === activeSection).reduce((acc, t) => acc + (t.type === 'income' ? t.amount : -t.amount), 0)) >= 0
-                ? 'bg-emerald-500/10 text-emerald-500'
-                : 'bg-red-500/10 text-red-500'
-                }`}>
-                Balance: {formatCurrency(transactions.filter(t => (t.section || 'Personal') === activeSection).reduce((acc, t) => acc + (t.type === 'income' ? t.amount : -t.amount), 0))}
               </div>
+            )}
+          </>
+        ) : (
+          <div className="flex-1 flex items-center justify-center text-muted-foreground/40">
+            <div className="text-center">
+              <FileSpreadsheet className="w-16 h-16 mx-auto mb-4 opacity-20" />
+              <p className="text-lg font-medium">No sheets yet</p>
+              <p className="text-sm mt-1">Create your first sheet to start tracking</p>
+              <Button className="mt-4 gap-2 bg-gradient-to-r from-cyan-600 to-blue-600 text-white" onClick={() => setNewSheetDialog(true)}>
+                <Plus className="w-4 h-4" /> Create Sheet
+              </Button>
             </div>
           </div>
-          <CardContent className="p-4">
-            <div className="space-y-2">
-              {transactions
-                .filter(t => (t.section || 'Personal') === activeSection)
-                .filter(t => filterType === 'all' ? true : t.type === filterType)
-                .sort((a, b) => new Date(b.date) - new Date(a.date) || new Date(b.created_at || 0) - new Date(a.created_at || 0))
-                .length > 0 ? (
-                transactions
-                  .filter(t => (t.section || 'Personal') === activeSection)
-                  .filter(t => filterType === 'all' ? true : t.type === filterType)
-                  .sort((a, b) => new Date(b.date) - new Date(a.date) || new Date(b.created_at || 0) - new Date(a.created_at || 0))
-                  .map(t => <TransactionCard key={t.id} transaction={t} />)
-              ) : (
-                <div className="text-center py-12 text-muted-foreground/50 border-2 border-dashed border-border/50 rounded-xl">
-                  <p className="text-sm">No {filterType !== 'all' ? filterType : ''} transactions in {activeSection}</p>
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+        )}
       </div>
 
-      {/* Delete Confirmation Dialog */}
-      <Dialog open={!!transactionToDelete} onOpenChange={(open) => !open && setTransactionToDelete(null)}>
-        <DialogContent className="sm:max-w-[400px]">
-          <DialogHeader>
-            <DialogTitle>Confirm Delete</DialogTitle>
-            <CardDescription className="pt-2">
-              Are you sure you want to delete this {transactionToDelete?.type} of {transactionToDelete && formatCurrency(transactionToDelete.amount)}? This action cannot be undone.
-            </CardDescription>
-          </DialogHeader>
-          <div className="flex justify-end gap-3 pt-4">
-            <Button variant="outline" onClick={() => setTransactionToDelete(null)}>Cancel</Button>
-            <Button
-              variant="destructive"
-              onClick={() => {
-                handleDelete(transactionToDelete.id);
-                setTransactionToDelete(null);
-              }}
-              className="bg-red-600 hover:bg-red-700"
+      {/* Sheet Tabs — Bottom Bar */}
+      <div className="flex items-center gap-1 mt-2 overflow-x-auto pb-1">
+        {sheets.map(sheet => (
+          <div key={sheet.id} className="flex items-center group">
+            <button
+              onClick={() => setActiveSheetId(sheet.id)}
+              className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-all whitespace-nowrap border border-b-0 ${activeSheetId === sheet.id
+                ? 'bg-card text-foreground border-border/50 shadow-sm'
+                : 'bg-muted/30 text-muted-foreground hover:text-foreground hover:bg-muted/50 border-transparent'
+                }`}
             >
-              Delete Transaction
-            </Button>
+              {sheet.name}
+            </button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className={`p-1 rounded transition-opacity ${activeSheetId === sheet.id ? 'opacity-60 hover:opacity-100' : 'opacity-0 group-hover:opacity-60 hover:!opacity-100'
+                  }`}>
+                  <MoreHorizontal className="w-3.5 h-3.5" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="min-w-[120px]">
+                <DropdownMenuItem onClick={() => { setRenameDialog(sheet); setRenameName(sheet.name); }}>
+                  <Pencil className="w-3.5 h-3.5 mr-2" /> Rename
+                </DropdownMenuItem>
+                <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => setDeleteConfirm(sheet)}>
+                  <Trash2 className="w-3.5 h-3.5 mr-2" /> Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        ))}
+        <button
+          onClick={() => setNewSheetDialog(true)}
+          className="px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-t-lg transition-all border border-transparent"
+          title="Add sheet"
+        >
+          <Plus className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* New Sheet Dialog */}
+      <Dialog open={newSheetDialog} onOpenChange={setNewSheetDialog}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader><DialogTitle>Create New Sheet</DialogTitle></DialogHeader>
+          <div className="space-y-4 pt-2">
+            <Input value={newSheetName} onChange={e => setNewSheetName(e.target.value)}
+              placeholder="Sheet name..." autoFocus onKeyDown={e => e.key === 'Enter' && createSheet()} />
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setNewSheetDialog(false)}>Cancel</Button>
+              <Button onClick={createSheet} disabled={!newSheetName.trim()}
+                className="bg-gradient-to-r from-cyan-600 to-blue-600 text-white">Create</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Rename Dialog */}
+      <Dialog open={!!renameDialog} onOpenChange={open => !open && setRenameDialog(null)}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader><DialogTitle>Rename Sheet</DialogTitle></DialogHeader>
+          <div className="space-y-4 pt-2">
+            <Input value={renameName} onChange={e => setRenameName(e.target.value)}
+              autoFocus onKeyDown={e => e.key === 'Enter' && renameSheet()} />
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setRenameDialog(null)}>Cancel</Button>
+              <Button onClick={renameSheet} disabled={!renameName.trim()}>Rename</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Sheet Confirmation */}
+      <Dialog open={!!deleteConfirm} onOpenChange={open => !open && setDeleteConfirm(null)}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader><DialogTitle>Delete Sheet</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground py-2">
+            Delete <strong>"{deleteConfirm?.name}"</strong> and all its rows? This can't be undone.
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setDeleteConfirm(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={deleteSheet} className="bg-red-600 hover:bg-red-700">Delete</Button>
           </div>
         </DialogContent>
       </Dialog>

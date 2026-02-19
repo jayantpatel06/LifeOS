@@ -195,6 +195,20 @@ code, .mono {
     margin: 1em 0;
 }
 
+/* Instagram embed styles */
+.tiptap .instagram-embed {
+    display: flex;
+    justify-content: center;
+    margin: 1em 0;
+}
+
+.tiptap .instagram-embed iframe {
+    max-width: 400px;
+    aspect-ratio: 4/5;
+    border-radius: 12px;
+    border: 1px solid hsl(var(--border) / 0.5);
+}
+
 /* Placeholder */
 .tiptap p.is-editor-empty:first-child::before {
     color: hsl(var(--muted-foreground));
@@ -274,6 +288,65 @@ code, .mono {
 
 .contribution-cell.level-4 {
     background-color: hsl(160 84% 50%);
+}
+
+/* Budget Spreadsheet Table */
+.budget-table {
+    border-collapse: collapse;
+}
+
+.budget-th {
+    padding: 10px 14px;
+    text-align: left;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: hsl(var(--muted-foreground));
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    white-space: nowrap;
+}
+
+.budget-th:hover {
+    color: hsl(var(--foreground));
+}
+
+.budget-td {
+    padding: 8px 14px;
+    border-bottom: 1px solid hsl(var(--border) / 0.3);
+    vertical-align: middle;
+}
+
+.budget-row {
+    transition: background-color 0.1s ease;
+}
+
+.budget-row:hover {
+    background-color: hsl(var(--accent) / 0.05) !important;
+}
+
+.budget-cell-input {
+    width: 100%;
+    padding: 4px 8px;
+    background: hsl(var(--background));
+    border: 2px solid hsl(var(--primary) / 0.5);
+    border-radius: 4px;
+    color: hsl(var(--foreground));
+    font-size: 0.875rem;
+    outline: none;
+    transition: border-color 0.15s;
+}
+
+.budget-cell-input:focus {
+    border-color: hsl(var(--primary));
+    box-shadow: 0 0 0 2px hsl(var(--primary) / 0.15);
+}
+
+.budget-cell-input option {
+    background: hsl(var(--popover));
+    color: hsl(var(--foreground));
 }
 
 /* Glass effect */
