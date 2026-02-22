@@ -2,6 +2,7 @@ from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, UploadFi
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
@@ -142,6 +143,9 @@ class NoteUpdate(BaseModel):
     categories: Optional[List[str]] = None
     is_favorite: Optional[bool] = None
     parent_id: Optional[str] = None
+
+class UploadResponse(BaseModel):
+    url: str
 
 class NoteResponse(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -368,6 +372,32 @@ async def update_daily_activity(user_id: str, field: str, increment: int = 1):
         }
         activity[field] = increment
         await db.daily_activity.insert_one(activity)
+
+@api_router.post("/upload", response_model=UploadResponse)
+async def upload_file(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
+    """Upload a file and return its URL."""
+    try:
+        # Create upload directory if not exists
+        upload_dir = ROOT_DIR / "static" / "uploads"
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Generate unique filename
+        ext = Path(file.filename).suffix
+        filename = f"{uuid.uuid4()}{ext}"
+        filepath = upload_dir / filename
+        
+        # Save file
+        with open(filepath, "wb") as buffer:
+            content = await file.read()
+            buffer.write(content)
+            
+        # Return URL
+        # Assuming server runs on root or typical setup
+        url = f"/static/uploads/{filename}"
+        return UploadResponse(url=url)
+    except Exception as e:
+        logger.error(f"File upload error: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to upload file: {str(e)}")
 
 # ============ AUTH ROUTES ============
 
@@ -1219,6 +1249,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Mount static files
+app.mount("/static", StaticFiles(directory=str(ROOT_DIR / "static")), name="static")
 
 # Include router
 app.include_router(api_router)

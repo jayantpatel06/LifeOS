@@ -1,19 +1,16 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { Label } from '../components/ui/label';
-import { Badge } from '../components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { ScrollArea } from '../components/ui/scroll-area';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '../components/ui/dropdown-menu';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { useEditor, EditorContent } from '@tiptap/react';
+import { cn } from '../lib/utils';
+import { PanelResizeHandle, Panel, PanelGroup } from "react-resizable-panels";
+import { useRef } from 'react';
 import StarterKit from '@tiptap/starter-kit';
 import Link from '@tiptap/extension-link';
 import Image from '@tiptap/extension-image';
@@ -21,229 +18,244 @@ import Youtube from '@tiptap/extension-youtube';
 import Placeholder from '@tiptap/extension-placeholder';
 import Instagram from '../extensions/Instagram';
 import {
-  Plus, FileText, BookOpen, Wallet, Zap, MoreVertical, Trash2, Edit, Star, StarOff,
+  Plus, FileText, MoreVertical, Trash2, Edit, Star, StarOff,
   Bold, Italic, Strikethrough, Code, List, ListOrdered, Quote, Heading1, Heading2,
-  Link as LinkIcon, Image as ImageIcon, Youtube as YoutubeIcon, Instagram as InstagramIcon, File, Search, Tag, X, Check, ArrowLeft, Upload
+  Link as LinkIcon, Image as ImageIcon, Youtube as YoutubeIcon, Instagram as InstagramIcon,
+  Search, ChevronRight, ChevronDown, File, Upload, PanelLeft, X
 } from 'lucide-react';
 
-
-
-const DEFAULT_CATEGORIES = [
-  { value: 'study', label: 'Study', icon: BookOpen, color: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
-  { value: 'shopping', label: 'Shopping', icon: Wallet, color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' },
-  { value: 'general', label: 'General', icon: FileText, color: 'bg-purple-500/20 text-purple-400 border-purple-500/30' },
-  { value: 'quick', label: 'Quick', icon: Zap, color: 'bg-orange-500/20 text-orange-400 border-orange-500/30' },
-];
-
-const EditorToolbar = ({ editor }) => {
+// --- Editor Toolbar (Reused) ---
+const EditorToolbar = ({ editor, onToggleSidebar, isSidebarCollapsed }) => {
+  const { api } = useAuth();
   if (!editor) return null;
 
   const addYoutubeVideo = () => {
     const url = window.prompt('Enter YouTube URL:');
-    if (url) {
-      editor.commands.setYoutubeVideo({ src: url });
-    }
+    if (url) editor.commands.setYoutubeVideo({ src: url });
   };
 
   const addImage = () => {
     const url = window.prompt('Enter image URL:');
-    if (url) {
-      editor.commands.setImage({ src: url });
-    }
+    if (url) editor.commands.setImage({ src: url });
   };
 
-  const handleImageUpload = (e) => {
+  const handleImageUpload = async (e) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        editor.commands.setImage({ src: event.target.result });
-      };
-      reader.readAsDataURL(file);
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        const promise = api.post('/upload', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+
+        toast.promise(promise, {
+          loading: 'Uploading image...',
+          success: (res) => {
+            const url = api.defaults.baseURL.replace('/api', '') + res.data.url;
+            editor.commands.setImage({ src: url });
+            return 'Image uploaded';
+          },
+          error: 'Failed to upload image'
+        });
+      } catch (error) {
+        console.error("Upload failed", error);
+      }
     }
-    e.target.value = ''; // Reset input
+    e.target.value = '';
   };
 
   const addInstagramPost = () => {
     const url = window.prompt('Enter Instagram post or reel URL:');
-    if (url) {
-      editor.commands.setInstagramPost({ src: url });
-    }
+    if (url) editor.commands.setInstagramPost({ src: url });
   };
 
+  const ToolbarBtn = ({ onClick, isActive, icon: Icon, title }) => (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon"
+      onClick={onClick}
+      className={cn("h-8 w-8", isActive ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:text-foreground')}
+      title={title}
+    >
+      <Icon className="w-4 h-4" />
+    </Button>
+  );
+
   return (
-    <div className="border-b border-border bg-muted/30 p-2 flex flex-wrap gap-1">
+    <div className="border-b border-border/50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 p-1 flex flex-wrap gap-0.5 sticky top-0 z-10 items-center">
       <Button
-        type="button"
         variant="ghost"
         size="icon"
-        onClick={() => editor.chain().focus().toggleBold().run()}
-        className={editor.isActive('bold') ? 'bg-accent' : ''}
+        onClick={onToggleSidebar}
+        className={cn("h-8 w-8 mr-1", isSidebarCollapsed ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground")}
+        title={isSidebarCollapsed ? "Show Sidebar" : "Hide Sidebar"}
       >
-        <Bold className="w-4 h-4" />
+        <PanelLeft className="w-4 h-4" />
       </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        onClick={() => editor.chain().focus().toggleItalic().run()}
-        className={editor.isActive('italic') ? 'bg-accent' : ''}
-      >
-        <Italic className="w-4 h-4" />
-      </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        onClick={() => editor.chain().focus().toggleStrike().run()}
-        className={editor.isActive('strike') ? 'bg-accent' : ''}
-      >
-        <Strikethrough className="w-4 h-4" />
-      </Button>
+      <div className="w-px h-5 bg-border mx-1 self-center" />
 
-      <div className="w-px h-6 bg-border mx-1 self-center" />
+      <ToolbarBtn onClick={() => editor.chain().focus().toggleBold().run()} isActive={editor.isActive('bold')} icon={Bold} title="Bold" />
+      <ToolbarBtn onClick={() => editor.chain().focus().toggleItalic().run()} isActive={editor.isActive('italic')} icon={Italic} title="Italic" />
+      <ToolbarBtn onClick={() => editor.chain().focus().toggleStrike().run()} isActive={editor.isActive('strike')} icon={Strikethrough} title="Strikethrough" />
 
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
-        className={editor.isActive('heading', { level: 1 }) ? 'bg-accent' : ''}
-      >
-        <Heading1 className="w-4 h-4" />
-      </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-        className={editor.isActive('heading', { level: 2 }) ? 'bg-accent' : ''}
-      >
-        <Heading2 className="w-4 h-4" />
-      </Button>
+      <div className="w-px h-5 bg-border mx-1 self-center" />
 
-      <div className="w-px h-6 bg-border mx-1 self-center" />
+      <ToolbarBtn onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()} isActive={editor.isActive('heading', { level: 1 })} icon={Heading1} title="Heading 1" />
+      <ToolbarBtn onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} isActive={editor.isActive('heading', { level: 2 })} icon={Heading2} title="Heading 2" />
 
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        onClick={() => editor.chain().focus().toggleBulletList().run()}
-        className={editor.isActive('bulletList') ? 'bg-accent' : ''}
-      >
-        <List className="w-4 h-4" />
-      </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        onClick={() => editor.chain().focus().toggleOrderedList().run()}
-        className={editor.isActive('orderedList') ? 'bg-accent' : ''}
-      >
-        <ListOrdered className="w-4 h-4" />
-      </Button>
+      <div className="w-px h-5 bg-border mx-1 self-center" />
 
-      <div className="w-px h-6 bg-border mx-1 self-center" />
+      <ToolbarBtn onClick={() => editor.chain().focus().toggleBulletList().run()} isActive={editor.isActive('bulletList')} icon={List} title="Bullet List" />
+      <ToolbarBtn onClick={() => editor.chain().focus().toggleOrderedList().run()} isActive={editor.isActive('orderedList')} icon={ListOrdered} title="Ordered List" />
+      <ToolbarBtn onClick={() => editor.chain().focus().toggleBlockquote().run()} isActive={editor.isActive('blockquote')} icon={Quote} title="Quote" />
+      <ToolbarBtn onClick={() => editor.chain().focus().toggleCodeBlock().run()} isActive={editor.isActive('codeBlock')} icon={Code} title="Code Block" />
 
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        onClick={() => editor.chain().focus().toggleBlockquote().run()}
-        className={editor.isActive('blockquote') ? 'bg-accent' : ''}
-      >
-        <Quote className="w-4 h-4" />
-      </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        onClick={() => editor.chain().focus().toggleCodeBlock().run()}
-        className={editor.isActive('codeBlock') ? 'bg-accent' : ''}
-      >
-        <Code className="w-4 h-4" />
-      </Button>
+      <div className="w-px h-5 bg-border mx-1 self-center" />
 
-      <div className="w-px h-6 bg-border mx-1 self-center" />
-
-      <Button type="button" variant="ghost" size="icon" onClick={addYoutubeVideo}>
-        <YoutubeIcon className="w-4 h-4" />
-      </Button>
-      <Button type="button" variant="ghost" size="icon" onClick={addInstagramPost}>
-        <InstagramIcon className="w-4 h-4" />
-      </Button>
-      <Button type="button" variant="ghost" size="icon" onClick={addImage} title="Add image from URL">
-        <ImageIcon className="w-4 h-4" />
-      </Button>
-      <Button type="button" variant="ghost" size="icon" onClick={() => document.getElementById('image-upload').click()} title="Upload image from device">
+      <ToolbarBtn onClick={addYoutubeVideo} icon={YoutubeIcon} title="Add YouTube" />
+      <ToolbarBtn onClick={addInstagramPost} icon={InstagramIcon} title="Add Instagram" />
+      <ToolbarBtn onClick={addImage} icon={ImageIcon} title="Add Image URL" />
+      <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" onClick={() => document.getElementById('image-upload').click()} title="Upload Image">
         <Upload className="w-4 h-4" />
       </Button>
-      <input
-        type="file"
-        id="image-upload"
-        accept="image/*"
-        onChange={handleImageUpload}
-        className="hidden"
-      />
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        onClick={() => {
-          const url = window.prompt('Enter URL:');
-          if (url) editor.commands.setLink({ href: url });
-        }}
-        className={editor.isActive('link') ? 'bg-accent' : ''}
+      <input type="file" id="image-upload" accept="image/*" onChange={handleImageUpload} className="hidden" />
+
+      <ToolbarBtn onClick={() => { const url = window.prompt('Enter URL:'); if (url) editor.commands.setLink({ href: url }); }} isActive={editor.isActive('link')} icon={LinkIcon} title="Link" />
+    </div>
+  );
+};
+
+// --- Tree View Components ---
+
+const NoteTreeItem = ({ note, level, onSelect, selectedId, onToggleExpand, expandedIds, onCreateChild, onDelete, onToggleFavorite }) => {
+  const hasChildren = note.children && note.children.length > 0;
+  const isExpanded = expandedIds.includes(note.id);
+  const isSelected = selectedId === note.id;
+
+  return (
+    <div className="select-none">
+      <div
+        className={cn(
+          "group flex items-center gap-1 py-1 px-2 rounded-md cursor-pointer transition-colors text-sm",
+          isSelected ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+        )}
+        style={{ paddingLeft: `${level * 12 + 8}px` }}
+        onClick={() => onSelect(note)}
       >
-        <LinkIcon className="w-4 h-4" />
-      </Button>
+        <div
+          className={cn("p-0.5 rounded-sm hover:bg-muted-foreground/20 transition-colors cursor-pointer", !hasChildren && "invisible")}
+          onClick={(e) => { e.stopPropagation(); onToggleExpand(note.id); }}
+        >
+          {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+        </div>
+
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          <FileText className="w-3.5 h-3.5 shrink-0 opacity-70" />
+          <span className="truncate">{note.title || "Untitled"}</span>
+        </div>
+
+        <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+              <Button variant="ghost" size="icon" className="h-5 w-5 hover:bg-background/80">
+                <MoreVertical className="w-3 h-3" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onCreateChild(note.id); }}>
+                <Plus className="w-3.5 h-3.5 mr-2" /> Add sub-page
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onToggleFavorite(note); }}>
+                {note.is_favorite ? <StarOff className="w-3.5 h-3.5 mr-2" /> : <Star className="w-3.5 h-3.5 mr-2" />}
+                {note.is_favorite ? "Remove favorite" : "Add to favorites"}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onDelete(note.id); }} className="text-destructive">
+                <Trash2 className="w-3.5 h-3.5 mr-2" /> Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-5 w-5 hover:bg-background/80"
+            onClick={(e) => { e.stopPropagation(); onCreateChild(note.id); }}
+            title="Add sub-page"
+          >
+            <Plus className="w-3 h-3" />
+          </Button>
+        </div>
+      </div>
+
+      {hasChildren && isExpanded && (
+        <div className="ml-0">
+          {note.children.map(child => (
+            <NoteTreeItem
+              key={child.id}
+              note={child}
+              level={level + 1}
+              onSelect={onSelect}
+              selectedId={selectedId}
+              onToggleExpand={onToggleExpand}
+              expandedIds={expandedIds}
+              onCreateChild={onCreateChild}
+              onDelete={onDelete}
+              onToggleFavorite={onToggleFavorite}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 };
 
 export const Notes = () => {
-  const { api, user, refreshUser } = useAuth();
+  const { api } = useAuth();
   const [notes, setNotes] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('all');
-  const [selectedNote, setSelectedNote] = useState(null);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedNoteId, setSelectedNoteId] = useState(null);
+  const [expandedIds, setExpandedIds] = useState([]);
+  const [isLightboxOpen, setIsLightboxOpen] = useState(false);
+  const [lightboxSrc, setLightboxSrc] = useState('');
+  const sidebarRef = useRef(null);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
-  // Custom Labels State
-  const [customLabels, setCustomLabels] = useState([]);
-  const [newLabelName, setNewLabelName] = useState('');
-  const [isAddLabelOpen, setIsAddLabelOpen] = useState(false);
+  // Refs for Auto-save
+  const saveTimeoutRef = useRef(null);
+  const selectedNoteIdRef = useRef(selectedNoteId);
+  const saveContentRef = useRef(null);
 
-  // Form state
-  const [title, setTitle] = useState('');
-  const [selectedCategories, setSelectedCategories] = useState(['general']);
-  const [editingNote, setEditingNote] = useState(null);
+  useEffect(() => { selectedNoteIdRef.current = selectedNoteId; }, [selectedNoteId]);
 
+  // Editor State
   const editor = useEditor({
     extensions: [
       StarterKit,
       Link.configure({ openOnClick: true }),
-      Image,
-      Youtube.configure({
-        width: 640,
-        height: 360,
-        HTMLAttributes: { class: 'youtube-video' },
-        controls: true
-      }),
-      Instagram.configure({
-        width: 400,
-        height: 500,
-      }),
-      Placeholder.configure({ placeholder: 'Write something amazing...' })
+      Image.configure({ inline: true }),
+      Youtube.configure({ width: 640, height: 360, controls: true }),
+      Instagram.configure({ width: 400, height: 500 }),
+      Placeholder.configure({ placeholder: 'Start writing...' })
     ],
     content: '',
     editorProps: {
       attributes: {
-        class: 'tiptap prose prose-invert max-w-none focus:outline-none min-h-[300px] p-4'
+        class: 'prose prose-invert max-w-none w-full focus:outline-none min-h-[500px] py-4 px-4 text-base leading-relaxed break-words whitespace-pre-wrap [&_img]:max-h-[350px] [&_img]:w-auto [&_img]:rounded-md [&_img]:shadow-sm [&_img]:cursor-zoom-in [&_img]:inline-block [&_img]:mr-2 [&_img]:mb-2 [&_img]:align-top'
+      },
+      handleClickOn: (view, pos, node, nodePos, event, direct) => {
+        if (node && node.type && node.type.name === 'image') {
+          setLightboxSrc(node.attrs.src);
+          setIsLightboxOpen(true);
+          return true;
+        }
+        return false;
       }
     },
-    editable: true,
+    onUpdate: ({ editor }) => {
+      // Debounced save could go here
+    }
   });
 
   const fetchNotes = useCallback(async () => {
@@ -256,548 +268,280 @@ export const Notes = () => {
       setLoading(false);
     }
   }, [api]);
+
+  useEffect(() => { fetchNotes(); }, [fetchNotes]);
+
+  // Tree Building Logic
+  const noteTree = useMemo(() => {
+    const noteMap = {};
+    const rootNotes = [];
+
+    // Pass 1: Initialize map
+    notes.forEach(note => {
+      noteMap[note.id] = { ...note, children: [] };
+    });
+
+    // Pass 2: Build tree
+    notes.forEach(note => {
+      if (note.parent_id && noteMap[note.parent_id]) {
+        noteMap[note.parent_id].children.push(noteMap[note.id]);
+      } else {
+        rootNotes.push(noteMap[note.id]);
+      }
+    });
+
+    return rootNotes;
+  }, [notes]);
+
+  // Selection Logic
+  const selectedNote = useMemo(() =>
+    notes.find(n => n.id === selectedNoteId),
+    [notes, selectedNoteId]);
+
   useEffect(() => {
-    fetchNotes();
-  }, [fetchNotes]);
-
-  // Sync custom labels from user profile
-  useEffect(() => {
-    if (user?.custom_note_labels) {
-      setCustomLabels(user.custom_note_labels);
+    if (editor && selectedNote && editor.getHTML() !== selectedNote.content) {
+      editor.commands.setContent(selectedNote.content);
     }
-  }, [user]);
+  }, [selectedNoteId, editor]); // Only update when ID changes to avoid cursor jumps
 
-  const handleAddLabel = async (e) => {
-    e.preventDefault();
-    if (!newLabelName.trim()) return;
-
-    const updatedLabels = [...customLabels, newLabelName.trim()];
-
-    try {
-      await api.put('/auth/labels', { labels: updatedLabels });
-      await refreshUser();
-      setNewLabelName('');
-      setIsAddLabelOpen(false);
-      toast.success('Label created');
-    } catch (error) {
-      toast.error('Failed to create label');
+  // Actions
+  const handleSelectNote = (note) => {
+    if (selectedNoteId === note.id) return;
+    // Auto-save previous note if needed? (For now relying on manual Save or blur)
+    if (selectedNoteId && editor) {
+      handleSaveContent(selectedNoteId, editor.getHTML());
     }
+    setSelectedNoteId(note.id);
   };
 
-  const handleDeleteLabel = async (labelToDelete) => {
-    const updatedLabels = customLabels.filter(l => l !== labelToDelete);
-    try {
-      await api.put('/auth/labels', { labels: updatedLabels });
-      await refreshUser();
-      if (activeTab === labelToDelete) setActiveTab('all');
-      toast.success('Label deleted');
-    } catch (error) {
-      toast.error('Failed to delete label');
-    }
-  }
-
-  const getCategoryStyles = (catValue) => {
-    const defaultCat = DEFAULT_CATEGORIES.find(c => c.value === catValue);
-    if (defaultCat) return defaultCat;
-
-    return {
-      label: catValue,
-      icon: Tag,
-      color: 'bg-pink-500/20 text-pink-400 border-pink-500/30'
-    };
-  };
-
-  const toggleCategory = (catValue) => {
-    setSelectedCategories(prev =>
-      prev.includes(catValue)
-        ? prev.filter(c => c !== catValue)
-        : [...prev, catValue]
+  const handleToggleExpand = (id) => {
+    setExpandedIds(prev => prev.includes(id)
+      ? prev.filter(i => i !== id)
+      : [...prev, id]
     );
   };
 
-  const resetForm = () => {
-    setTitle('');
-    setSelectedCategories(['general']);
-    setEditingNote(null);
-    editor?.commands.setContent('');
+  const handleCreateNote = async (parentId = null) => {
+    try {
+      const res = await api.post('/notes', {
+        title: 'Untitled',
+        content: '',
+        parent_id: parentId
+      });
+      setNotes(prev => [...prev, res.data]);
+      setSelectedNoteId(res.data.id);
+      if (parentId) {
+        setExpandedIds(prev => [...prev, parentId]);
+      }
+      toast.success('New page created');
+    } catch (e) {
+      toast.error('Failed to create page');
+    }
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-
-    if (!editor || editor.isEmpty) {
-      toast.error('Please add some content to your note');
-      return;
+  const handleDeleteNote = async (id) => {
+    if (!confirm('Are you sure? This will delete all sub-pages as well.')) return;
+    try {
+      await api.delete(`/notes/${id}`);
+      setNotes(prev => prev.filter(n => n.id !== id)); // Needs recursive filter if purely local, but fetch refresh is safer
+      if (selectedNoteId === id) setSelectedNoteId(null);
+      fetchNotes(); // Refresh to clean up children
+      toast.success('Page deleted');
+    } catch (e) {
+      toast.error('Failed to delete page');
     }
+  };
 
-    const noteData = {
-      title,
-      content: editor?.getHTML() || '',
-      categories: selectedCategories,
-      is_favorite: editingNote?.is_favorite || false
+  const handleSaveContent = async (id, content) => {
+    // If id is not passed, use current selected
+    const targetId = id || selectedNoteId;
+    if (!targetId) return;
+
+    // Optimistic update
+    setNotes(prev => prev.map(n => n.id === targetId ? { ...n, content } : n));
+
+    try {
+      await api.put(`/notes/${targetId}`, { content });
+    } catch (e) {
+      console.error("Auto-save failed", e);
+      toast.error("Failed to save changes. Check connection.");
+    }
+  };
+
+  // Keep ref up to date
+  useEffect(() => { saveContentRef.current = handleSaveContent; }, [handleSaveContent]); // Dependent on notes
+
+  // Auto-save Listener
+  useEffect(() => {
+    if (!editor) return;
+
+    const handleUpdate = () => {
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+
+      saveTimeoutRef.current = setTimeout(() => {
+        const id = selectedNoteIdRef.current;
+        const fn = saveContentRef.current;
+        if (id && fn) {
+          fn(id, editor.getHTML());
+        }
+      }, 1000); // 1s delay
     };
 
-    try {
-      if (editingNote) {
-        await api.put(`/notes/${editingNote.id}`, noteData);
-        toast.success('Note updated!');
-      } else {
-        await api.post('/notes', noteData);
-        toast.success('Note created! +5 XP');
-      }
-      fetchNotes();
-      setDialogOpen(false);
-      setSelectedNote(null);
-      resetForm();
-    } catch (error) {
-      toast.error('Failed to save note');
-    }
-  };
+    editor.on('update', handleUpdate);
+    return () => editor.off('update', handleUpdate);
+  }, [editor]);
 
-  /* ... handleDelete, toggleFavorite ... */
-  const handleDelete = async (noteId) => {
+  const handleTitleChange = async (newTitle) => {
+    if (!selectedNoteId) return;
+    setNotes(prev => prev.map(n => n.id === selectedNoteId ? { ...n, title: newTitle } : n));
     try {
-      await api.delete(`/notes/${noteId}`);
-      setNotes(notes.filter(n => n.id !== noteId));
-      toast.success('Note deleted');
-      if (selectedNote?.id === noteId) {
-        setSelectedNote(null);
-      }
-    } catch (error) {
-      toast.error('Failed to delete note');
+      await api.put(`/notes/${selectedNoteId}`, { title: newTitle });
+    } catch (e) {
+      console.error("Title save failed", e);
     }
   };
 
   const handleToggleFavorite = async (note) => {
+    const newVal = !note.is_favorite;
+    setNotes(prev => prev.map(n => n.id === note.id ? { ...n, is_favorite: newVal } : n));
     try {
-      const updatedNote = { ...note, is_favorite: !note.is_favorite };
-      await api.put(`/notes/${note.id}`, { is_favorite: updatedNote.is_favorite });
-      setNotes(notes.map(n => n.id === note.id ? updatedNote : n));
-      if (selectedNote?.id === note.id) {
-        setSelectedNote(updatedNote);
+      api.put(`/notes/${note.id}`, { is_favorite: newVal });
+    } catch (e) { }
+  };
+
+  const toggleSidebar = () => {
+    const panel = sidebarRef.current;
+    if (panel) {
+      if (isSidebarCollapsed) {
+        panel.expand();
+      } else {
+        panel.collapse();
       }
-      toast.success(updatedNote.is_favorite ? 'Added to favorites' : 'Removed from favorites');
-    } catch (error) {
-      toast.error('Failed to update note');
+      // Note: react-resizable-panels doesn't seem to expose current collapsed state directly easily without callback
+      // But we can approximate with our own state
     }
   };
 
-  const handleEdit = (note) => {
-    setEditingNote(note);
-    setTitle(note.title);
-    setSelectedCategories(note.categories || ['general']);
-    editor?.commands.setContent(note.content || '');
-    setDialogOpen(true);
-  };
-
-  const handleSelectNote = (note) => {
-    setSelectedNote(note);
-  };
-
-  const filteredNotes = notes.filter(note => {
-    const matchesTab = activeTab === 'all' ||
-      (activeTab === 'favorites' && note.is_favorite) ||
-      (note.categories && note.categories.includes(activeTab));
-    const matchesSearch = note.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      note.content?.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesTab && matchesSearch;
-  });
-
-  const NoteCard = ({ note }) => {
-    const config = getCategoryStyles(note.category);
-    const Icon = config.icon;
-
-    return (
-      <motion.div
-        layout
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -10 }}
-        className={`group p-4 rounded-xl border transition-all duration-200 cursor-pointer ${selectedNote?.id === note.id
-          ? 'bg-primary/10 border-primary/30'
-          : 'bg-card border-border/50 hover:border-primary/30'
-          }`}
-        onClick={() => handleSelectNote(note)}
-        data-testid={`note-card-${note.id}`}
-      >
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1">
-              {note.is_favorite && <Star className="w-4 h-4 text-amber-500 fill-amber-500" />}
-              <p className="font-medium truncate">{note.title}</p>
-            </div>
-            <p className="text-sm text-muted-foreground line-clamp-2">
-              {note.content?.replace(/<[^>]*>/g, '').slice(0, 100) || 'No content'}
-            </p>
-            <div className="flex flex-wrap items-center gap-2 mt-3">
-              {(note.categories || ['general']).map(cat => {
-                const config = getCategoryStyles(cat);
-                const Icon = config.icon;
-                return (
-                  <Badge key={cat} variant="outline" className={config.color}>
-                    <Icon className="w-3 h-3 mr-1" />
-                    {config.label}
-                  </Badge>
-                );
-              })}
-              <span className="text-xs text-muted-foreground">
-                {(() => {
-                  try {
-                    return format(new Date(note.updated_at), 'MMM d, yyyy');
-                  } catch (e) {
-                    return '';
-                  }
-                })()}
-              </span>
-            </div>
-          </div>
-
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-              <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity" data-testid={`note-menu-${note.id}`}>
-                <MoreVertical className="w-4 h-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleToggleFavorite(note); }}>
-                {note.is_favorite ? <StarOff className="w-4 h-4 mr-2" /> : <Star className="w-4 h-4 mr-2" />}
-                {note.is_favorite ? 'Remove from favorites' : 'Add to favorites'}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleEdit(note); }}>
-                <Edit className="w-4 h-4 mr-2" /> Edit
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={(e) => { e.stopPropagation(); handleDelete(note.id); }}
-                className="text-destructive"
-              >
-                <Trash2 className="w-4 h-4 mr-2" /> Delete
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </motion.div>
-    );
-  };
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
+  if (loading) return <div className="flex justify-center mt-20"><div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" /></div>;
 
   return (
-    <div className="space-y-6" data-testid="notes-page">
-
-      {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input
-          placeholder="Search notes..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-10"
-          data-testid="note-search-input"
-        />
-      </div>
-
-      {/* Tabs and Add Note Button */}
-      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full lg:w-auto">
-          <TabsList className="grid w-full grid-cols-6 lg:w-auto lg:inline-flex items-center">
-            <TabsTrigger value="all" data-testid="notes-tab-all">All</TabsTrigger>
-            <TabsTrigger value="favorites" data-testid="notes-tab-favorites">
-              <Star className="w-4 h-4 mr-1 hidden sm:inline" />
-              Favorites
-            </TabsTrigger>
-
-            {DEFAULT_CATEGORIES.map(cat => (
-              <TabsTrigger key={cat.value} value={cat.value} data-testid={`notes-tab-${cat.value}`}>
-                {cat.label}
-              </TabsTrigger>
-            ))}
-
-            {customLabels.map(label => (
-              <TabsTrigger key={label} value={label} className="group relative pr-6">
-                {label}
-                <X
-                  className="w-3 h-3 absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 cursor-pointer hover:text-destructive transition-opacity"
-                  onClick={(e) => { e.stopPropagation(); handleDeleteLabel(label); }}
-                />
-              </TabsTrigger>
-            ))}
-
-            <Button variant="ghost" size="sm" className="px-2 h-7 ml-1" onClick={() => setIsAddLabelOpen(true)} title="Add Label">
-              <Plus className="w-4 h-4" />
+    <div className="h-[calc(100vh-2rem)] flex flex-col" data-testid="notes-page">
+      <AnimatePresence>
+        {isLightboxOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-background/95 backdrop-blur-sm p-4 sm:p-8"
+            onClick={() => setIsLightboxOpen(false)}
+          >
+            <Button variant="ghost" size="icon" className="absolute top-4 right-4 text-muted-foreground hover:text-foreground" onClick={() => setIsLightboxOpen(false)}>
+              <X className="w-8 h-8" />
             </Button>
-          </TabsList>
-        </Tabs>
+            <motion.img
+              src={lightboxSrc}
+              alt="Preview"
+              className="max-w-full max-h-full rounded-lg shadow-2xl object-contain outline-none"
+              initial={{ scale: 0.9 }}
+              animate={{ scale: 1 }}
+              onClick={(e) => e.stopPropagation()}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-        <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetForm(); }}>
-          <DialogTrigger asChild>
-            <Button className="gap-2 bg-gradient-to-r from-violet-600 to-indigo-600 w-full lg:w-auto" data-testid="add-note-btn">
-              <Plus className="w-4 h-4" /> New Note
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>{editingNote ? 'Edit Note' : 'Create New Note'}</DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4 mt-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="note-title">Title</Label>
-                  <Input
-                    id="note-title"
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    placeholder="Note title"
-                    required
-                    data-testid="note-title-input"
-                  />
-                </div>
+      {/* Main Layout */}
+      <div className="flex-1 border border-border/40 rounded-xl overflow-hidden bg-card/10 backdrop-blur-sm">
+        <PanelGroup direction="horizontal">
+          {/* Sidebar Panel */}
+          <Panel
+            ref={sidebarRef}
+            defaultSize={20}
+            minSize={15}
+            maxSize={30}
+            collapsible={true}
+            onCollapse={() => setIsSidebarCollapsed(true)}
+            onExpand={() => setIsSidebarCollapsed(false)}
+            className={cn("flex flex-col border-r border-border/40 bg-background/50", isSidebarCollapsed && "min-w-0 p-0 overflow-hidden")}
+          >
+            <div className="p-4 flex items-center justify-between">
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Pages</span>
+              <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-foreground" onClick={() => handleCreateNote()}>
+                <Plus className="w-4 h-4" />
+              </Button>
+            </div>
 
-                <div className="space-y-3">
-                  <Label>Labels</Label>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="outline" className="w-full justify-start gap-2 h-auto py-2 px-3 min-h-[42px] border-border bg-muted/20 hover:bg-muted/30 transition-colors">
-                        {selectedCategories.length > 0 ? (
-                          <div className="flex flex-wrap gap-1">
-                            {selectedCategories.map(cat => {
-                              const config = getCategoryStyles(cat);
-                              return (
-                                <Badge key={cat} variant="secondary" className="px-1.5 py-0 text-[10px] font-medium">
-                                  {config.label}
-                                </Badge>
-                              );
-                            })}
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground text-sm">Select labels...</span>
-                        )}
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent className="w-[300px]" align="start">
-                      <div className="p-2 text-xs font-semibold text-muted-foreground border-b border-border/50 mb-1">
-                        Select Categories
-                      </div>
-                      <ScrollArea className="h-[200px]">
-                        {DEFAULT_CATEGORIES.map(cat => (
-                          <DropdownMenuItem
-                            key={cat.value}
-                            onClick={(e) => { e.preventDefault(); toggleCategory(cat.value); }}
-                            className="flex items-center justify-between py-2 cursor-pointer"
-                          >
-                            <div className="flex items-center gap-2">
-                              <cat.icon className="w-4 h-4 text-muted-foreground" />
-                              <span className="text-sm">{cat.label}</span>
-                            </div>
-                            {selectedCategories.includes(cat.value) && (
-                              <Check className="w-4 h-4 text-primary" />
-                            )}
-                          </DropdownMenuItem>
-                        ))}
-                        {customLabels.length > 0 && <DropdownMenuSeparator />}
-                        {customLabels.map(label => (
-                          <DropdownMenuItem
-                            key={label}
-                            onClick={(e) => { e.preventDefault(); toggleCategory(label); }}
-                            className="flex items-center justify-between py-2 cursor-pointer"
-                          >
-                            <div className="flex items-center gap-2">
-                              <Tag className="w-4 h-4 text-muted-foreground" />
-                              <span className="text-sm">{label}</span>
-                            </div>
-                            {selectedCategories.includes(label) && (
-                              <Check className="w-4 h-4 text-primary" />
-                            )}
-                          </DropdownMenuItem>
-                        ))}
-                      </ScrollArea>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        onClick={() => setIsAddLabelOpen(true)}
-                        className="py-2 cursor-pointer text-primary focus:text-primary font-medium"
-                      >
-                        <Plus className="w-4 h-4 mr-2" /> New Label
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Content</Label>
-                <div className="border border-border rounded-lg overflow-hidden">
-                  <EditorToolbar editor={editor} />
-                  <EditorContent editor={editor} data-testid="note-content-editor" />
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-3 pt-4">
-                <Button type="button" variant="outline" onClick={() => { setDialogOpen(false); resetForm(); }}>
-                  Cancel
-                </Button>
-                <Button type="submit" className="bg-gradient-to-r from-violet-600 to-indigo-600" data-testid="note-submit-btn">
-                  {editingNote ? 'Update' : 'Create'} Note
-                </Button>
-              </div>
-            </form>
-          </DialogContent>
-        </Dialog>
-      </div>
-
-
-      {/* Notes Content */}
-      <div className="relative min-h-[600px]">
-        <AnimatePresence mode="wait" initial={false}>
-          {!selectedNote ? (
-            <motion.div
-              key="list"
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              transition={{ duration: 0.2 }}
-              className="space-y-3"
-            >
-              {filteredNotes.length === 0 ? (
-                <Card className="border-dashed">
-                  <CardContent className="flex flex-col items-center justify-center py-12">
-                    <FileText className="w-12 h-12 text-muted-foreground/50 mb-4" />
-                    <p className="text-lg font-medium text-muted-foreground">No notes found</p>
-                    <p className="text-sm text-muted-foreground/70 mb-4">
-                      Create your first note to get started
-                    </p>
-                    <Button variant="outline" onClick={() => setDialogOpen(true)} className="gap-2">
-                      <Plus className="w-4 h-4" /> Create Note
-                    </Button>
-                  </CardContent>
-                </Card>
-              ) : (
-                <ScrollArea className="h-[700px] pr-4">
-                  <AnimatePresence mode="popLayout">
-                    {filteredNotes.map(note => (
-                      <div key={note.id} className="mb-3">
-                        <NoteCard note={note} />
-                      </div>
-                    ))}
-                  </AnimatePresence>
-                </ScrollArea>
-              )}
-            </motion.div>
-          ) : (
-            <motion.div
-              key="preview"
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 20 }}
-              transition={{ duration: 0.2 }}
-            >
-              <Card className="min-h-[600px]" data-testid="note-preview">
-                <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-3">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => setSelectedNote(null)}
-                        className="h-8 w-8"
-                      >
-                        <ArrowLeft className="w-5 h-5" />
-                      </Button>
-                      <CardTitle className="text-xl">{selectedNote.title}</CardTitle>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleToggleFavorite(selectedNote)}
-                        data-testid="note-preview-favorite-btn"
-                      >
-                        {selectedNote.is_favorite ? (
-                          <Star className="w-5 h-5 text-amber-500 fill-amber-500" />
-                        ) : (
-                          <StarOff className="w-5 h-5" />
-                        )}
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleEdit(selectedNote)}
-                        data-testid="note-preview-edit-btn"
-                      >
-                        <Edit className="w-5 h-5" />
-                      </Button>
-                    </div>
+            <ScrollArea className="flex-1 px-2">
+              <div className="pb-4">
+                {noteTree.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-8 text-muted-foreground/50">
+                    <span className="text-xs">No pages</span>
                   </div>
-                  <div className="flex items-center gap-3 mt-2 pl-11">
-                    <p className="text-sm text-muted-foreground">
-                      Last updated: {(() => {
-                        try {
-                          return format(new Date(selectedNote.updated_at), 'MMM d, yyyy h:mm a');
-                        } catch (e) {
-                          return 'N/A';
-                        }
-                      })()}
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {(selectedNote.categories || ['general']).map(cat => {
-                        const config = getCategoryStyles(cat);
-                        const Icon = config.icon;
-                        return (
-                          <Badge key={cat} variant="outline" className={config.color}>
-                            <Icon className="w-3 h-3 mr-1" />
-                            {config.label}
-                          </Badge>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="pt-6">
-                  <ScrollArea className="h-[600px] px-11">
-                    <div
-                      className="tiptap prose prose-invert max-w-none pb-20"
-                      dangerouslySetInnerHTML={{ __html: selectedNote.content || '<p>No content</p>' }}
+                ) : (
+                  noteTree.map(note => (
+                    <NoteTreeItem
+                      key={note.id}
+                      note={note}
+                      level={0}
+                      selectedId={selectedNoteId}
+                      onSelect={handleSelectNote}
+                      onToggleExpand={handleToggleExpand}
+                      expandedIds={expandedIds}
+                      onCreateChild={handleCreateNote}
+                      onDelete={handleDeleteNote}
+                      onToggleFavorite={handleToggleFavorite}
                     />
-                  </ScrollArea>
-                </CardContent>
-              </Card>
-            </motion.div>
-          )}
-        </AnimatePresence>
+                  ))
+                )}
+              </div>
+            </ScrollArea>
+          </Panel>
+
+          <PanelResizeHandle className={cn("w-px bg-border/50 hover:bg-primary/50 transition-colors w-1 hover:w-1 active:bg-primary z-50 cursor-col-resize", isSidebarCollapsed && "w-0 hidden")} />
+
+          {/* Editor Panel */}
+          <Panel defaultSize={80}>
+            {selectedNote ? (
+              <div className="h-full flex flex-col bg-background">
+                {/* Toolbar Area */}
+                <div className="border-b border-border/40 z-10">
+                  <EditorToolbar editor={editor} onToggleSidebar={toggleSidebar} isSidebarCollapsed={isSidebarCollapsed} />
+                </div>
+
+                <ScrollArea className="flex-1">
+                  <div className="p-4 w-full">
+                    {/* Title Input */}
+                    <input
+                      value={selectedNote.title}
+                      onChange={(e) => handleTitleChange(e.target.value)}
+                      className="text-3xl font-bold bg-transparent border-none focus:outline-none w-full placeholder:text-muted-foreground/20 text-foreground mb-4 tracking-tight"
+                      placeholder="Untitled"
+                    />
+
+                    {/* Cont ent */}
+                    <div className="min-h-[500px] pb-20" onClick={() => editor?.chain().focus().run()}>
+                      <EditorContent editor={editor} className="prose prose-stone dark:prose-invert max-w-none leading-normal" />
+                    </div>
+
+                    {/* Footer Meta */}
+                    <div className="mt-8 pt-4 border-t border-border/20 text-xs text-muted-foreground/40">
+                      Last updated: {format(new Date(selectedNote.updated_at), 'MMM d, h:mm a')}
+                    </div>
+                  </div>
+                </ScrollArea>
+              </div>
+            ) : (
+              <div className="h-full flex flex-col items-center justify-center text-center p-8 text-muted-foreground">
+                <div className="w-12 h-12 bg-muted/20 rounded-full flex items-center justify-center mb-4">
+                  <FileText className="w-6 h-6 text-muted-foreground/50" />
+                </div>
+                <h2 className="text-lg font-medium text-foreground mb-1">No page selected</h2>
+                <p className="max-w-xs text-sm">Select a page to start writing.</p>
+              </div>
+            )}
+          </Panel>
+        </PanelGroup>
       </div>
-      {/* Add Label Dialog */}
-      <Dialog open={isAddLabelOpen} onOpenChange={setIsAddLabelOpen}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>Add New Label</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleAddLabel} className="space-y-4 mt-4">
-            <div className="space-y-2">
-              <Label htmlFor="label-name">Label Name</Label>
-              <Input
-                id="label-name"
-                value={newLabelName}
-                onChange={(e) => setNewLabelName(e.target.value)}
-                placeholder="e.g. Work, Ideas"
-                required
-                maxLength={20}
-              />
-            </div>
-            <div className="flex justify-end gap-3">
-              <Button type="button" variant="outline" onClick={() => setIsAddLabelOpen(false)}>
-                Cancel
-              </Button>
-              <Button type="submit" className="bg-primary text-primary-foreground">
-                Create Label
-              </Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };
