@@ -302,6 +302,7 @@ export const Notes = () => {
     if (editor && selectedNote && editor.getHTML() !== selectedNote.content) {
       editor.commands.setContent(selectedNote.content);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedNoteId, editor]); // Only update when ID changes to avoid cursor jumps
 
   // Actions
@@ -352,7 +353,7 @@ export const Notes = () => {
     }
   };
 
-  const handleSaveContent = async (id, content) => {
+  const handleSaveContent = useCallback(async (id, content) => {
     // If id is not passed, use current selected
     const targetId = id || selectedNoteId;
     if (!targetId) return;
@@ -366,7 +367,7 @@ export const Notes = () => {
       console.error("Auto-save failed", e);
       toast.error("Failed to save changes. Check connection.");
     }
-  };
+  }, [api, selectedNoteId]);
 
   // Keep ref up to date
   useEffect(() => { saveContentRef.current = handleSaveContent; }, [handleSaveContent]); // Dependent on notes

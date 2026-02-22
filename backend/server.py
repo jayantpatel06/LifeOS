@@ -1250,8 +1250,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Ensure static directory exists
+static_dir = ROOT_DIR / "static"
+static_dir.mkdir(parents=True, exist_ok=True)
+
 # Mount static files
-app.mount("/static", StaticFiles(directory=str(ROOT_DIR / "static")), name="static")
+app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
 # Include router
 app.include_router(api_router)
