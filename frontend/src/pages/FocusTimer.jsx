@@ -6,7 +6,7 @@ import { Badge } from '../components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Progress } from '../components/ui/progress';
 import { toast } from 'sonner';
-import { Play, Pause, RotateCcw, Coffee, Brain, Target, Clock, CheckCircle2, Zap } from 'lucide-react';
+import { Play, Pause, RotateCcw, Coffee, Brain, Target, Clock, CheckCircle2, Zap, Bell, BellOff, Waves, VolumeX, Music } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const TIMER_PRESETS = {
@@ -23,9 +23,13 @@ export const FocusTimer = () => {
   const [currentSession, setCurrentSession] = useState(null);
   const [stats, setStats] = useState(null);
   const [sessionsCompleted, setSessionsCompleted] = useState(0);
-  const [customDuration, setCustomDuration] = useState('25');
+  const [customDuration, setCustomDuration] = useState(25);
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [ambientPlaying, setAmbientPlaying] = useState(false);
+  const [isEditingTime, setIsEditingTime] = useState(false);
   const intervalRef = useRef(null);
   const audioRef = useRef(null);
+  const ambientRef = useRef(null);
 
   const fetchStats = useCallback(async () => {
     try {
@@ -41,10 +45,12 @@ export const FocusTimer = () => {
     clearInterval(intervalRef.current);
 
     // Play notification sound
-    try {
-      audioRef.current?.play();
-    } catch (e) {
-      console.log('Audio play failed:', e);
+    if (soundEnabled) {
+      try {
+        audioRef.current?.play();
+      } catch (e) {
+        console.log('Audio play failed:', e);
+      }
     }
 
     if (mode === 'focus' && currentSession) {
@@ -80,9 +86,20 @@ export const FocusTimer = () => {
 
   useEffect(() => {
     fetchStats();
-    // Create audio element for notification
-    audioRef.current = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2teleQT1U5rW24NsCwAPkdLkjV0EA1Gd2+KIXgEAOpTW4YdaAABzk9zjg1gAAFSW2eKDVwAAQJPW4YVYAAAyktThiFoAAC6R0+GKXQAALL/T4YxgAAAwv9PhkGMAADS/0+GUZgAAOMbQ4ZlpAAA8xtDhnWwAAEDE0OGhcAAAQr3Q4aVzAABGvdDhqXYAAEq90OGteQAATrnP4bF8AABSuc/htX8AAFW5z+G5ggAAWrXP4b2FAABYI8riqogAAF0iyuKujAAAYSLK4rKPAABlIsrist');
+    // Create audio elements
+    audioRef.current = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+    ambientRef.current = new Audio('https://assets.mixkit.co/active_storage/sfx/125/125-preview.mp3'); // Example rain/ambient loop
+    ambientRef.current.loop = true;
+    ambientRef.current.volume = 0.4;
   }, [fetchStats]);
+
+  useEffect(() => {
+    if (ambientPlaying && isRunning) {
+      ambientRef.current?.play().catch(() => setAmbientPlaying(false));
+    } else {
+      ambientRef.current?.pause();
+    }
+  }, [ambientPlaying, isRunning]);
 
   useEffect(() => {
     if (isRunning && timeLeft > 0) {
@@ -100,7 +117,7 @@ export const FocusTimer = () => {
     if (mode === 'focus' && !currentSession) {
       try {
         const response = await api.post('/focus/start', {
-          duration_planned: parseInt(customDuration)
+          duration_planned: customDuration
         });
         setCurrentSession(response.data);
       } catch (error) {
@@ -143,7 +160,35 @@ export const FocusTimer = () => {
       setCurrentSession(null);
     }
     setMode(newMode);
-    setTimeLeft(TIMER_PRESETS[newMode].duration * 60);
+
+    // Auto-update duration when returning to focus mode if custom is different
+    if (newMode === 'focus' && customDuration !== TIMER_PRESETS.focus.duration) {
+      setTimeLeft(customDuration * 60);
+    } else {
+      setTimeLeft(TIMER_PRESETS[newMode].duration * 60);
+    }
+  };
+
+  const handleCustomDurationChange = (e) => {
+    let val = parseInt(e.target.value);
+    if (isNaN(val)) val = '';
+    else if (val < 1) val = 1;
+    else if (val > 180) val = 180; // max 3 hours
+    setCustomDuration(val);
+
+    if (val !== '') {
+      if (!isRunning && mode === 'focus') {
+        setTimeLeft(val * 60);
+      }
+    }
+  };
+
+  const handleDurationBlur = () => {
+    setIsEditingTime(false);
+    if (customDuration === '' || isNaN(customDuration)) {
+      setCustomDuration(25);
+      if (!isRunning && mode === 'focus') setTimeLeft(25 * 60);
+    }
   };
 
   const formatTime = (seconds) => {
@@ -152,8 +197,9 @@ export const FocusTimer = () => {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const progress = ((TIMER_PRESETS[mode].duration * 60 - timeLeft) / (TIMER_PRESETS[mode].duration * 60)) * 100;
   const config = TIMER_PRESETS[mode];
+  const totalDurationSeconds = mode === 'focus' && customDuration !== config.duration ? customDuration * 60 : config.duration * 60;
+  const progress = ((totalDurationSeconds - timeLeft) / totalDurationSeconds) * 100;
   const Icon = config.icon;
 
   return (
@@ -225,13 +271,48 @@ export const FocusTimer = () => {
                     className="text-4xl font-bold font-mono"
                     data-testid="timer-display"
                   >
-                    {formatTime(timeLeft)}
+                    {!isRunning && mode === 'focus' && isEditingTime ? (
+                      <input
+                        type="number"
+                        value={customDuration}
+                        onChange={handleCustomDurationChange}
+                        onBlur={handleDurationBlur}
+                        onKeyDown={(e) => { if (e.key === 'Enter') handleDurationBlur(); }}
+                        autoFocus
+                        min="1" max="180"
+                        className="w-24 bg-transparent border-none text-center focus:outline-none placeholder-muted-foreground/30"
+                        placeholder="25"
+                      />
+                    ) : (
+                      <div
+                        onClick={() => { if (!isRunning && mode === 'focus') setIsEditingTime(true); }}
+                        className={!isRunning && mode === 'focus' ? 'cursor-text hover:text-muted-foreground transition-colors' : ''}
+                        title={!isRunning && mode === 'focus' ? "Click to edit duration" : ""}
+                      >
+                        {formatTime(timeLeft)}
+                      </div>
+                    )}
                   </motion.div>
                   <Badge variant="outline" className={`mt-2 bg-${config.color}-500/20 text-${config.color}-400 border-${config.color}-500/30`}>
                     <Icon className="w-3 h-3 mr-1" />
                     {config.label}
                   </Badge>
                 </div>
+              </div>
+
+              {/* Sound Settings & Spotify */}
+              <div className="flex justify-center gap-2 mb-6 text-muted-foreground">
+                <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full hover:bg-muted/50 hover:text-foreground" onClick={() => setSoundEnabled(!soundEnabled)} title="Toggle completion sound">
+                  {soundEnabled ? <Bell className="w-4 h-4" /> : <BellOff className="w-4 h-4 opacity-50" />}
+                </Button>
+                <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full hover:bg-muted/50 hover:text-foreground" onClick={() => setAmbientPlaying(!ambientPlaying)} title="Toggle ambient rain sound">
+                  {ambientPlaying ? <Waves className="w-4 h-4 text-blue-400" /> : <VolumeX className="w-4 h-4 opacity-50" />}
+                </Button>
+                <a href="https://open.spotify.com" target="_blank" rel="noopener noreferrer">
+                  <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full hover:bg-green-500/20 hover:text-green-500 transition-colors" title="Open Deep Focus on Spotify">
+                    <Music className="w-4 h-4" />
+                  </Button>
+                </a>
               </div>
 
               {/* Controls */}
@@ -284,7 +365,7 @@ export const FocusTimer = () => {
             transition={{ delay: 0.1 }}
           >
             <Card data-testid="today-focus-stat">
-              <CardContent className="p-4">
+              <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-s text-muted-foreground">Today</p>
@@ -306,7 +387,7 @@ export const FocusTimer = () => {
             transition={{ delay: 0.2 }}
           >
             <Card data-testid="sessions-today-stat">
-              <CardContent className="p-4">
+              <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-s text-muted-foreground">Sessions Today</p>
@@ -326,7 +407,7 @@ export const FocusTimer = () => {
             transition={{ delay: 0.3 }}
           >
             <Card data-testid="total-focus-stat">
-              <CardContent className="p-4">
+              <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-s text-muted-foreground">Total Focus</p>
@@ -348,7 +429,7 @@ export const FocusTimer = () => {
             transition={{ delay: 0.4 }}
           >
             <Card data-testid="completion-rate-stat">
-              <CardContent className="p-4">
+              <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-s text-muted-foreground">Completion Rate</p>
