@@ -3,7 +3,6 @@ import { useAuth } from '../contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Progress } from '../components/ui/progress';
 import { toast } from 'sonner';
 import { Play, Pause, RotateCcw, Coffee, Brain, Target, Clock, CheckCircle2, Zap, Bell, BellOff, Waves, VolumeX, Music } from 'lucide-react';
@@ -30,6 +29,7 @@ export const FocusTimer = () => {
   const intervalRef = useRef(null);
   const audioRef = useRef(null);
   const ambientRef = useRef(null);
+  const [resetConfirmMode, setResetConfirmMode] = useState(null); // pending mode switch
 
   const fetchStats = useCallback(async () => {
     try {
@@ -56,10 +56,9 @@ export const FocusTimer = () => {
     if (mode === 'focus' && currentSession) {
       try {
         await api.patch(`/focus/${currentSession.id}/complete`, {
-          duration_actual: TIMER_PRESETS.focus.duration,
-          interrupted: false
+          duration_actual: customDuration,
         });
-        toast.success('Focus session completed! +25 XP', {
+        toast.success('Focus session complete! +25 XP 🎉', {
           icon: <CheckCircle2 className="w-5 h-5 text-emerald-500" />
         });
         setSessionsCompleted(prev => prev + 1);
@@ -82,7 +81,7 @@ export const FocusTimer = () => {
       setTimeLeft(TIMER_PRESETS.focus.duration * 60);
       toast.info('Break complete! Ready to focus?');
     }
-  }, [mode, currentSession, sessionsCompleted, api, fetchStats, refreshUser]);
+  }, [mode, currentSession, sessionsCompleted, api, fetchStats, refreshUser, soundEnabled, customDuration]);
 
   useEffect(() => {
     fetchStats();
@@ -138,35 +137,48 @@ export const FocusTimer = () => {
     clearInterval(intervalRef.current);
 
     if (currentSession && mode === 'focus') {
+      // Mark as interrupted — no XP, no stats, no achievements
       try {
         await api.patch(`/focus/${currentSession.id}/complete`, {
-          duration_actual: TIMER_PRESETS[mode].duration * 60 - timeLeft,
-          interrupted: true
+          duration_actual: customDuration * 60 - timeLeft,
+          interrupted: true,
         });
       } catch (error) {
-        console.error('Failed to mark session as interrupted:', error);
+        console.error('Failed to end session:', error);
       }
       setCurrentSession(null);
     }
 
-    setTimeLeft(TIMER_PRESETS[mode].duration * 60);
+    if (mode === 'focus' && customDuration !== TIMER_PRESETS.focus.duration) {
+      setTimeLeft(customDuration * 60);
+    } else {
+      setTimeLeft(TIMER_PRESETS[mode].duration * 60);
+    }
   };
 
   const changeMode = (newMode) => {
-    if (isRunning) {
-      pauseTimer();
-    }
-    if (currentSession) {
-      setCurrentSession(null);
+    if (newMode === mode) return;
+    // If there's an active focus session, ask for confirmation instead of abandoning it
+    if (currentSession && mode === 'focus') {
+      setResetConfirmMode(newMode);
+      return;
     }
     setMode(newMode);
-
-    // Auto-update duration when returning to focus mode if custom is different
+    if (isRunning) pauseTimer();
     if (newMode === 'focus' && customDuration !== TIMER_PRESETS.focus.duration) {
       setTimeLeft(customDuration * 60);
     } else {
       setTimeLeft(TIMER_PRESETS[newMode].duration * 60);
     }
+  };
+
+  const confirmModeSwitch = async () => {
+    if (!resetConfirmMode) return;
+    await resetTimer(); // ends session as interrupted
+    const newMode = resetConfirmMode;
+    setResetConfirmMode(null);
+    setMode(newMode);
+    setTimeLeft(TIMER_PRESETS[newMode].duration * 60);
   };
 
   const handleCustomDurationChange = (e) => {
@@ -233,6 +245,17 @@ export const FocusTimer = () => {
                   </Button>
                 ))}
               </div>
+
+              {/* Session reset confirmation prompt */}
+              {resetConfirmMode && (
+                <div className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 flex flex-col gap-2">
+                  <p className="text-sm font-medium text-amber-400">You have an active focus session. Reset it to switch mode?</p>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="destructive" onClick={confirmModeSwitch}>Reset &amp; Switch</Button>
+                    <Button size="sm" variant="outline" onClick={() => setResetConfirmMode(null)}>Keep Running</Button>
+                  </div>
+                </div>
+              )}
 
               {/* Timer Display */}
               <div className="relative w-48 h-48 mx-auto mb-6">
@@ -412,7 +435,7 @@ export const FocusTimer = () => {
                   <div>
                     <p className="text-s text-muted-foreground">Total Focus</p>
                     <p className="text-lg font-bold font-mono mt-0.5">
-                      {Math.floor((stats?.total_focus_time || 0) / 60)}h
+                      {Math.floor((stats?.total_focus_time || 0) / 60)}h {(stats?.total_focus_time || 0) % 60}m
                     </p>
                   </div>
                   <div className="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center">
@@ -432,9 +455,9 @@ export const FocusTimer = () => {
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-s text-muted-foreground">Completion Rate</p>
+                    <p className="text-s text-muted-foreground">Total Sessions</p>
                     <p className="text-lg font-bold font-mono mt-0.5">
-                      {stats?.completion_rate?.toFixed(0) || 0}%
+                      {stats?.total_sessions || 0}
                     </p>
                   </div>
                   <div className="w-10 h-10 rounded-xl bg-orange-500/20 flex items-center justify-center">

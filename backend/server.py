@@ -60,9 +60,6 @@ class UserResponse(BaseModel):
     total_xp: int = 0
     current_streak: int = 0
     longest_streak: int = 0
-    initial_balance: float = 0.0
-    is_initial_balance_set: bool = False
-    custom_note_labels: List[str] = []
     created_at: str
 
 class TokenResponse(BaseModel):
@@ -78,7 +75,6 @@ class ChecklistItem(BaseModel):
 class TaskCreate(BaseModel):
     title: str
     description: Optional[str] = ""
-    category: str = "daily"  # daily, weekly, high_priority
     priority: int = 1
     estimated_time: Optional[int] = None
     due_date: Optional[str] = None
@@ -91,7 +87,6 @@ class TaskCreate(BaseModel):
 class TaskUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
-    category: Optional[str] = None
     priority: Optional[int] = None
     estimated_time: Optional[int] = None
     due_date: Optional[str] = None
@@ -108,11 +103,9 @@ class TaskResponse(BaseModel):
     user_id: str
     title: str
     description: str
-    category: str
     priority: int
     status: str
     estimated_time: Optional[int]
-    actual_time: Optional[int]
     due_date: Optional[str]
     completed_at: Optional[str]
     tags: List[str]
@@ -123,12 +116,6 @@ class TaskResponse(BaseModel):
     created_at: str
     updated_at: str
 
-class TaskReorderItem(BaseModel):
-    id: str
-    position: int
-
-class TaskReorderRequest(BaseModel):
-    items: List[TaskReorderItem]
 
 class NoteCreate(BaseModel):
     title: str
@@ -182,7 +169,6 @@ class BudgetRowUpdate(BaseModel):
 
 class FocusSessionCreate(BaseModel):
     duration_planned: int
-    task_id: Optional[str] = None
 
 class FocusSessionComplete(BaseModel):
     duration_actual: int
@@ -192,7 +178,6 @@ class FocusSessionResponse(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str
     user_id: str
-    task_id: Optional[str]
     duration_planned: int
     duration_actual: Optional[int]
     started_at: str
@@ -205,8 +190,6 @@ class DailyActivityResponse(BaseModel):
     tasks_completed: int
     focus_time: int
     notes_created: int
-    expenses_logged: int
-    completion_percentage: int
 
 class AchievementResponse(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -225,11 +208,7 @@ class DashboardStats(BaseModel):
     longest_streak: int
     total_xp: int
     current_level: int
-    tasks_completed_today: int
-    tasks_total_today: int
-    focus_time_today: int
     notes_count: int
-    weekly_completion_rate: float
     total_tasks_completed: int
     total_focus_time: int
 
@@ -253,7 +232,6 @@ class HabitResponse(BaseModel):
     order: int
     is_completed: bool
     last_completed_date: Optional[str] = None
-    current_streak: int = 0
     created_at: str
 
 class HabitReorder(BaseModel):
@@ -319,14 +297,13 @@ async def update_streak(user_id: str):
     if not user:
         return
     
-    # Check if user completed at least one task today
-    tasks_today = await db.tasks.count_documents({
-        "user_id": user_id,
-        "status": "completed",
-        "completed_at": {"$regex": f"^{today}"}
-    })
+    # Only use daily_activity — no fallback to db.tasks to avoid double-counting
+    daily_stats = await db.daily_activity.find_one({"user_id": user_id, "date": today})
+    activity_today = 0
+    if daily_stats:
+        activity_today = daily_stats.get("tasks_completed", 0) + daily_stats.get("focus_time", 0)
     
-    if tasks_today > 0:
+    if activity_today > 0:
         last_streak_date = user.get("last_streak_date", "")
         current_streak = user.get("current_streak", 0)
         longest_streak = user.get("longest_streak", 0)
@@ -367,8 +344,6 @@ async def update_daily_activity(user_id: str, field: str, increment: int = 1):
             "tasks_completed": 0,
             "focus_time": 0,
             "notes_created": 0,
-            "expenses_logged": 0,
-            "completion_percentage": 0
         }
         activity[field] = increment
         await db.daily_activity.insert_one(activity)
@@ -425,8 +400,6 @@ async def register(data: UserCreate):
         "current_streak": 0,
         "longest_streak": 0,
         "last_streak_date": "",
-        "initial_balance": 0.0,
-        "is_initial_balance_set": False,
         "created_at": now,
         "updated_at": now
     }
@@ -442,9 +415,6 @@ async def register(data: UserCreate):
         total_xp=0,
         current_streak=0,
         longest_streak=0,
-        initial_balance=0.0,
-        is_initial_balance_set=False,
-        custom_note_labels=[],
         created_at=now
     )
     
@@ -466,8 +436,6 @@ async def login(data: UserLogin):
         total_xp=user.get("total_xp", 0),
         current_streak=user.get("current_streak", 0),
         longest_streak=user.get("longest_streak", 0),
-        initial_balance=user.get("initial_balance", 0.0),
-        custom_note_labels=user.get("custom_note_labels", []),
         created_at=user["created_at"]
     )
     
@@ -483,75 +451,14 @@ async def get_me(user: dict = Depends(get_current_user)):
         total_xp=user.get("total_xp", 0),
         current_streak=user.get("current_streak", 0),
         longest_streak=user.get("longest_streak", 0),
-        initial_balance=user.get("initial_balance", 0.0),
-        custom_note_labels=user.get("custom_note_labels", []),
         created_at=user["created_at"]
-    )
-
-class LabelUpdate(BaseModel):
-    labels: List[str]
-
-@api_router.put("/auth/labels", response_model=UserResponse)
-async def update_labels(data: LabelUpdate, user: dict = Depends(get_current_user)):
-    await db.users.update_one(
-        {"id": user["id"]},
-        {"$set": {"custom_note_labels": data.labels}}
-    )
-    
-    updated_user = await db.users.find_one({"id": user["id"]}, {"_id": 0})
-    return UserResponse(
-        id=updated_user["id"],
-        email=updated_user["email"],
-        username=updated_user["username"],
-        current_level=updated_user.get("current_level", 1),
-        total_xp=updated_user.get("total_xp", 0),
-        current_streak=updated_user.get("current_streak", 0),
-        longest_streak=updated_user.get("longest_streak", 0),
-        initial_balance=updated_user.get("initial_balance", 0.0),
-        is_initial_balance_set=updated_user.get("is_initial_balance_set", False),
-        custom_note_labels=updated_user.get("custom_note_labels", []),
-        created_at=updated_user["created_at"]
-    )
-
-class BalanceUpdate(BaseModel):
-    initial_balance: float
-
-@api_router.put("/auth/balance", response_model=UserResponse)
-async def update_balance(data: BalanceUpdate, user: dict = Depends(get_current_user)):
-    # Check if already set
-    current_user = await db.users.find_one({"id": user["id"]})
-    if current_user.get("is_initial_balance_set", False):
-        raise HTTPException(status_code=400, detail="Initial balance can only be set once")
-
-    await db.users.update_one(
-        {"id": user["id"]},
-        {"$set": {
-            "initial_balance": data.initial_balance, 
-            "is_initial_balance_set": True
-        }}
-    )
-    
-    updated_user = await db.users.find_one({"id": user["id"]}, {"_id": 0})
-    return UserResponse(
-        id=updated_user["id"],
-        email=updated_user["email"],
-        username=updated_user["username"],
-        current_level=updated_user.get("current_level", 1),
-        total_xp=updated_user.get("total_xp", 0),
-        current_streak=updated_user.get("current_streak", 0),
-        longest_streak=updated_user.get("longest_streak", 0),
-        initial_balance=updated_user.get("initial_balance", 0.0),
-        is_initial_balance_set=updated_user.get("is_initial_balance_set", True),
-        created_at=updated_user["created_at"]
     )
 
 # ============ TASK ROUTES ============
 
 @api_router.get("/tasks", response_model=List[TaskResponse])
-async def get_tasks(category: Optional[str] = None, status: Optional[str] = None, user: dict = Depends(get_current_user)):
+async def get_tasks(status: Optional[str] = None, user: dict = Depends(get_current_user)):
     query = {"user_id": user["id"]}
-    if category:
-        query["category"] = category
     if status:
         query["status"] = status
     
@@ -568,12 +475,10 @@ async def create_task(data: TaskCreate, user: dict = Depends(get_current_user)):
         "user_id": user["id"],
         "title": data.title,
         "description": data.description or "",
-        "category": data.category,
         "priority": data.priority,
         "position": data.position if data.position is not None else 0,
         "status": "pending",
         "estimated_time": data.estimated_time,
-        "actual_time": None,
         "due_date": data.due_date,
         "completed_at": None,
         "tags": data.tags,
@@ -609,12 +514,25 @@ async def update_task(task_id: str, data: TaskUpdate, user: dict = Depends(get_c
     old_status = task.get("status", "pending")
     new_status = update_data.get("status", old_status)
     
+    # Handle checklist item completions
+    if "checklist" in update_data:
+        old_completed = sum(1 for item in task.get("checklist", []) if item.get("completed"))
+        new_completed = sum(1 for item in update_data["checklist"] if item.get("completed"))
+        newly_completed = new_completed - old_completed
+        
+        if newly_completed > 0:
+            xp_reward = (10 + (task.get("priority", 1) * 10)) * newly_completed
+            await add_xp(user["id"], xp_reward)
+            await update_daily_activity(user["id"], "tasks_completed", newly_completed)
+            await update_streak(user["id"])
+            await check_achievements(user["id"])
+
     # Handle status transition: non-completed -> completed
     if new_status == "completed" and old_status != "completed":
         update_data["completed_at"] = now
         await db.tasks.update_one({"id": task_id}, {"$set": update_data})
         
-        # Trigger gamification side effects
+        # Trigger gamification side effects (only if the card itself was marked completed)
         xp_reward = 10 + (task.get("priority", 1) * 10)
         await add_xp(user["id"], xp_reward)
         await update_streak(user["id"])
@@ -649,33 +567,11 @@ async def complete_task(task_id: str, user: dict = Depends(get_current_user)):
     # Update streak and daily activity
     await update_streak(user["id"])
     await update_daily_activity(user["id"], "tasks_completed")
+    await check_achievements(user["id"])
     
     updated_task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
     return updated_task
 
-@api_router.put("/tasks/reorder")
-async def reorder_tasks(data: TaskReorderRequest, user: dict = Depends(get_current_user)):
-    try:
-        # Use bulk_write for efficiency if possible, or loop updates
-        # MongoDB bulk_write is compatible with motor? Yes.
-        
-        print(f"Reordering {len(data.items)} tasks for user {user['id']}")
-        
-        operations = [
-            UpdateOne(
-                {"id": item.id, "user_id": user["id"]},
-                {"$set": {"position": item.position, "updated_at": datetime.now(timezone.utc).isoformat()}}
-            )
-            for item in data.items
-        ]
-        
-        if operations:
-            await db.tasks.bulk_write(operations)
-        
-        return {"message": "Tasks reordered"}
-    except Exception as e:
-        print(f"Error reordering tasks: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.delete("/tasks/{task_id}")
 async def delete_task(task_id: str, user: dict = Depends(get_current_user)):
@@ -946,12 +842,11 @@ async def start_focus_session(data: FocusSessionCreate, user: dict = Depends(get
     session_doc = {
         "id": session_id,
         "user_id": user["id"],
-        "task_id": data.task_id,
         "duration_planned": data.duration_planned,
         "duration_actual": None,
         "started_at": now,
         "completed_at": None,
-        "interrupted": False
+        "interrupted": False,
     }
     
     await db.focus_sessions.insert_one(session_doc)
@@ -971,15 +866,16 @@ async def complete_focus_session(session_id: str, data: FocusSessionComplete, us
         {"$set": {
             "duration_actual": data.duration_actual,
             "completed_at": now,
-            "interrupted": data.interrupted
+            "interrupted": data.interrupted,
         }}
     )
     
-    # Award XP for completing focus session
+    # Only award XP and update stats for naturally completed sessions
     if not data.interrupted:
         await add_xp(user["id"], 25)
-    
-    await update_daily_activity(user["id"], "focus_time", data.duration_actual)
+        await update_daily_activity(user["id"], "focus_time", data.duration_actual)
+        await update_streak(user["id"])
+        await check_achievements(user["id"])
     
     updated_session = await db.focus_sessions.find_one({"id": session_id}, {"_id": 0})
     return updated_session
@@ -991,13 +887,13 @@ async def get_focus_sessions(user: dict = Depends(get_current_user)):
 
 @api_router.get("/focus/stats")
 async def get_focus_stats(user: dict = Depends(get_current_user)):
+    # Only count sessions that completed naturally (not interrupted/reset)
     sessions = await db.focus_sessions.find(
-        {"user_id": user["id"], "completed_at": {"$ne": None}},
+        {"user_id": user["id"], "completed_at": {"$ne": None}, "interrupted": False},
         {"_id": 0}
     ).to_list(1000)
     
     total_time = sum(s.get("duration_actual", 0) for s in sessions)
-    completed_sessions = len([s for s in sessions if not s.get("interrupted", False)])
     total_sessions = len(sessions)
     
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -1007,8 +903,6 @@ async def get_focus_stats(user: dict = Depends(get_current_user)):
     return {
         "total_focus_time": total_time,
         "total_sessions": total_sessions,
-        "completed_sessions": completed_sessions,
-        "completion_rate": (completed_sessions / total_sessions * 100) if total_sessions > 0 else 0,
         "today_focus_time": today_time,
         "today_sessions": len(today_sessions)
     }
@@ -1127,50 +1021,29 @@ async def reorder_habits(data: HabitReorder, user: dict = Depends(get_current_us
 
 @api_router.get("/dashboard/stats", response_model=DashboardStats)
 async def get_dashboard_stats(user: dict = Depends(get_current_user)):
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    week_ago = (datetime.now(timezone.utc) - timedelta(days=7)).strftime("%Y-%m-%d")
+    user_data = await db.users.find_one({"id": user["id"]}, {"_id": 0})
     
-    # Tasks today
-    tasks_today = await db.tasks.find({
-        "user_id": user["id"],
-        "$or": [
-            {"due_date": {"$regex": f"^{today}"}},
-            {"category": "daily"}
-        ]
-    }, {"_id": 0}).to_list(1000)
-    
-    tasks_completed_today = len([t for t in tasks_today if t["status"] == "completed"])
-    
-    # Weekly completion rate
-    weekly_tasks = await db.tasks.find({
-        "user_id": user["id"],
-        "created_at": {"$gte": week_ago}
-    }, {"_id": 0}).to_list(1000)
-    
-    weekly_completed = len([t for t in weekly_tasks if t["status"] == "completed"])
-    weekly_rate = (weekly_completed / len(weekly_tasks) * 100) if weekly_tasks else 0
-    
-    # Focus time today
-    today_activity = await db.daily_activity.find_one({"user_id": user["id"], "date": today}, {"_id": 0})
-    focus_time_today = today_activity.get("focus_time", 0) if today_activity else 0
-    
-    # Notes count
     notes_count = await db.notes.count_documents({"user_id": user["id"]})
     
-    user_data = await db.users.find_one({"id": user["id"]}, {"_id": 0})
+    all_activities = await db.daily_activity.find({"user_id": user["id"]}, {"_id": 0}).to_list(10000)
+    total_tasks_completed = sum(a.get("tasks_completed", 0) for a in all_activities)
+    
+    total_focus_time = sum(
+        s.get("duration_actual", 0)
+        for s in await db.focus_sessions.find(
+            {"user_id": user["id"], "completed_at": {"$ne": None}, "interrupted": False},
+            {"_id": 0}
+        ).to_list(10000)
+    )
     
     return DashboardStats(
         current_streak=user_data.get("current_streak", 0),
         longest_streak=user_data.get("longest_streak", 0),
         total_xp=user_data.get("total_xp", 0),
         current_level=user_data.get("current_level", 1),
-        tasks_completed_today=tasks_completed_today,
-        tasks_total_today=len(tasks_today),
-        focus_time_today=focus_time_today,
         notes_count=notes_count,
-        weekly_completion_rate=round(weekly_rate, 1),
-        total_tasks_completed=await db.tasks.count_documents({"user_id": user["id"], "status": "completed"}),
-        total_focus_time=sum(s.get("duration_actual", 0) for s in await db.focus_sessions.find({"user_id": user["id"], "completed_at": {"$ne": None}}, {"_id": 0}).to_list(10000))
+        total_tasks_completed=total_tasks_completed,
+        total_focus_time=total_focus_time,
     )
 
 @api_router.get("/dashboard/activity", response_model=List[DailyActivityResponse])
@@ -1202,6 +1075,48 @@ ACHIEVEMENTS = [
     {"id": "note_taker", "name": "Note Taker", "description": "Create 50 notes", "type": "notes", "requirement": 50, "xp_reward": 200, "badge_icon": "file-text"},
 ]
 
+# Helper to check and unlock achievements for user
+async def check_achievements(user_id: str):
+    user_data = await db.users.find_one({"id": user_id}, {"_id": 0})
+    if not user_data:
+        return
+    
+    all_activities = await db.daily_activity.find({"user_id": user_id}, {"_id": 0}).to_list(10000)
+    tasks_completed = sum(a.get("tasks_completed", 0) for a in all_activities)
+    focus_sessions = await db.focus_sessions.count_documents({"user_id": user_id, "completed_at": {"$ne": None}, "interrupted": False})
+    notes_count = await db.notes.count_documents({"user_id": user_id})
+    current_streak = user_data.get("longest_streak", 0)
+    sessions = await db.focus_sessions.find({"user_id": user_id, "completed_at": {"$ne": None}, "interrupted": False}, {"_id": 0}).to_list(10000)
+    total_focus_minutes = sum(s.get("duration_actual", 0) for s in sessions)
+    
+    user_achievements = await db.user_achievements.find({"user_id": user_id}, {"_id": 0}).to_list(100)
+    unlocked_ids = {ua["achievement_id"] for ua in user_achievements}
+    
+    for ach in ACHIEVEMENTS:
+        if ach["id"] in unlocked_ids:
+            continue
+        unlocked = False
+        if ach["type"] == "task":
+            unlocked = tasks_completed >= ach["requirement"]
+        elif ach["type"] == "streak":
+            unlocked = current_streak >= ach["requirement"]
+        elif ach["type"] == "focus":
+            unlocked = focus_sessions >= ach["requirement"]
+        elif ach["type"] == "focus_hours":
+            unlocked = total_focus_minutes >= ach["requirement"]
+        elif ach["type"] == "notes":
+            unlocked = notes_count >= ach["requirement"]
+        
+        if unlocked:
+            now = datetime.now(timezone.utc).isoformat()
+            await db.user_achievements.insert_one({
+                "id": str(uuid.uuid4()),
+                "user_id": user_id,
+                "achievement_id": ach["id"],
+                "unlocked_at": now
+            })
+            await add_xp(user_id, ach["xp_reward"])
+
 @api_router.get("/achievements", response_model=List[AchievementResponse])
 async def get_achievements(user: dict = Depends(get_current_user)):
     # Get user stats
@@ -1213,7 +1128,7 @@ async def get_achievements(user: dict = Depends(get_current_user)):
     current_streak = user_data.get("longest_streak", 0)
     
     # Calculate total focus hours
-    sessions = await db.focus_sessions.find({"user_id": user["id"], "completed_at": {"$ne": None}}, {"_id": 0}).to_list(1000)
+    sessions = await db.focus_sessions.find({"user_id": user["id"], "completed_at": {"$ne": None}, "interrupted": False}, {"_id": 0}).to_list(1000)
     total_focus_minutes = sum(s.get("duration_actual", 0) for s in sessions)
     
     # Get unlocked achievements

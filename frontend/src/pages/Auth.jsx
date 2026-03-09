@@ -55,19 +55,20 @@ export const Auth = () => {
     { icon: Wallet, label: 'Budget Tracking', color: 'text-emerald-500' },
     { icon: Timer, label: 'Focus Timer', color: 'text-orange-500' },
     { icon: Flame, label: 'Streak System', color: 'text-red-500' },
+    { icon: Zap, label: 'Habit Tracking', color: 'text-yellow-500' },
   ];
 
   return (
     <div className="min-h-screen bg-background flex">
       {/* Left side - Hero */}
-      <div className="hidden lg:flex flex-1 flex-col justify-center px-12 xl:px-20 bg-gradient-to-br from-background via-card to-background">
+      <div className="hidden lg:flex flex-1 flex-col justify-center px-12 xl:px-20">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6 }}
         >
           <div className="flex items-center gap-4 mb-8">
-            <div className="w-14 h-14 rounded-2xl flex items-center justify-center shadow-xl glow-primary overflow-hidden">
+            <div className="w-14 h-14 rounded-2xl flex items-center justify-center shadow-xl overflow-hidden">
               <img src="/logo192-v2.png" alt="LifeOS Logo" className="w-full h-full object-cover" />
             </div>
             <h1 className="text-4xl font-bold font-['Outfit'] tracking-tight">LifeOS</h1>
@@ -80,7 +81,7 @@ export const Auth = () => {
             </span>
           </h2>
 
-          <p className="text-lg text-muted-foreground mb-12 max-w-lg">
+          <p className="text-lg text-muted-foreground mb-6 max-w-lg">
             The all-in-one productivity platform that combines tasks, notes, budget tracking,
             and focus tools in a gamified experience.
           </p>
@@ -137,7 +138,7 @@ export const Auth = () => {
                       <Input
                         id="login-email"
                         type="email"
-                        placeholder="you@example.com"
+                        placeholder="Enter your email"
                         value={loginEmail}
                         onChange={(e) => setLoginEmail(e.target.value)}
                         required
@@ -149,13 +150,14 @@ export const Auth = () => {
                       <Input
                         id="login-password"
                         type="password"
-                        placeholder="••••••••"
+                        placeholder="Enter your password"
                         value={loginPassword}
                         onChange={(e) => setLoginPassword(e.target.value)}
                         required
                         data-testid="login-password-input"
                       />
                     </div>
+                    <div className="space-y-14"> </div>
                     <Button
                       type="submit"
                       className="w-full bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700"
@@ -205,6 +207,7 @@ export const Auth = () => {
                         data-testid="register-password-input"
                       />
                     </div>
+                    
                     <Button
                       type="submit"
                       className="w-full bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700"

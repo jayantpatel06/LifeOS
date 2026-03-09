@@ -5,25 +5,21 @@ import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
-import { Textarea } from '../components/ui/textarea';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover';
 import { toast } from 'sonner';
 import {
-  Plus, Calendar, Clock, Edit, Trash2,
-  CheckCircle2, Circle, Flame, CalendarDays, Palette, X,
-  ListChecks, Square, CheckSquare, ChevronDown, ChevronRight, RotateCcw, GripVertical, Pin, Flag
+  Plus, Calendar, Edit, Trash2,
+  CheckCircle2, Circle, CalendarDays, Palette, X,
+  RotateCcw, GripVertical, Pin, Flag, ChevronDown,
+  Square, CheckSquare, Clock, Flame, ChevronRight
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible"
 import { Separator } from '../components/ui/separator';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 
 // DnD Imports
 import {
@@ -94,7 +90,7 @@ const SortableChecklistItem = ({ id, item, idx, onToggle, onChange, onRemove, co
 };
 
 // Standard Task Card Component (No DnD)
-const TaskCard = ({ task, onClick, onColorUpdate, onDelete, onEdit, onReset, onToggleItem, onPin }) => {
+const TaskCard = ({ task, onClick, onColorUpdate, onDelete, onEdit, onReset, onToggleItem, onPin, onToggleStatus }) => {
   const colorConfig = COLORS.find(c => c.bg === task.color) || COLORS[0];
   const checklist = task.checklist || [];
   // Show ALL active items
@@ -299,10 +295,9 @@ export const Tasks = () => {
       title: quickTitle || 'Untitled List',
       checklist: validItems,
       color: COLORS.find(c => c.id === quickColor)?.bg || 'bg-card',
-      category: 'daily',
       priority: parseInt(quickPriority),
       due_date: quickDueDate || null,
-      position: tasks.length // Append to end
+      position: tasks.length
     };
 
     try {

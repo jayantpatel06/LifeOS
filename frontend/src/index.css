@@ -275,19 +275,19 @@ code, .mono {
 }
 
 .contribution-cell.level-1 {
-    background-color: hsl(160 84% 20%);
+    background-color: hsl(160 84% 25%);
 }
 
 .contribution-cell.level-2 {
-    background-color: hsl(160 84% 30%);
+    background-color: hsl(160 84% 45%);
 }
 
 .contribution-cell.level-3 {
-    background-color: hsl(160 84% 39%);
+    background-color: hsl(160 84% 65%);
 }
 
 .contribution-cell.level-4 {
-    background-color: hsl(160 84% 50%);
+    background-color: hsl(160 84% 85%);
 }
 
 /* Budget Spreadsheet Table */

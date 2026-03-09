@@ -270,6 +270,8 @@ export const Settings = () => {
                   <p className="text-4xl font-bold font-mono mt-1">
                     {Math.floor((stats?.total_focus_time || 0) / 60)}
                     <span className="text-lg text-muted-foreground">h </span>
+                    {(stats?.total_focus_time || 0) % 60}
+                    <span className="text-lg text-muted-foreground">m</span>
                   </p>
                 </div>
                 <div className="w-16 h-16 rounded-2xl bg-blue-500/20 flex items-center justify-center">
