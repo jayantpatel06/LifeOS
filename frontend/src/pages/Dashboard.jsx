@@ -81,9 +81,15 @@ export const Dashboard = () => {
 
   const toggleTaskComplete = async (taskId, currentStatus) => {
     try {
-      const newStatus = currentStatus === 'completed' ? 'pending' : 'completed';
-      await api.put(`/tasks/${taskId}`, { status: newStatus });
-      setTasks(tasks.map(t => t.id === taskId ? { ...t, status: newStatus } : t));
+      if (currentStatus === 'completed') {
+        // Un-complete: use generic update endpoint
+        await api.put(`/tasks/${taskId}`, { status: 'pending' });
+        setTasks(tasks.map(t => t.id === taskId ? { ...t, status: 'pending', completed_at: null } : t));
+      } else {
+        // Complete: use the dedicated complete endpoint (triggers XP, streak, activity)
+        await api.patch(`/tasks/${taskId}/complete`);
+        setTasks(tasks.map(t => t.id === taskId ? { ...t, status: 'completed' } : t));
+      }
       refreshUser();
     } catch (error) {
       console.error('Failed to toggle task:', error);

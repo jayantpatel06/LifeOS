@@ -13,7 +13,7 @@ import { toast } from 'sonner';
 import {
   Plus, Calendar, Clock, Edit, Trash2,
   CheckCircle2, Circle, Flame, CalendarDays, Palette, X,
-  ListChecks, Square, CheckSquare, ChevronDown, ChevronRight, RotateCcw, GripVertical, Pin
+  ListChecks, Square, CheckSquare, ChevronDown, ChevronRight, RotateCcw, GripVertical, Pin, Flag
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
@@ -46,16 +46,16 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 
 const COLORS = [
-  { id: 'default', bg: 'bg-card', border: 'border-border/50', label: 'Default' },
-  { id: 'red', bg: 'bg-red-500/10', border: 'border-red-500/20', label: 'Red' },
-  { id: 'orange', bg: 'bg-orange-500/10', border: 'border-orange-500/20', label: 'Orange' },
-  { id: 'amber', bg: 'bg-amber-500/10', border: 'border-amber-500/20', label: 'Amber' },
-  { id: 'green', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20', label: 'Green' },
-  { id: 'teal', bg: 'bg-teal-500/10', border: 'border-teal-500/20', label: 'Teal' },
-  { id: 'blue', bg: 'bg-blue-500/10', border: 'border-blue-500/20', label: 'Blue' },
-  { id: 'indigo', bg: 'bg-indigo-500/10', border: 'border-indigo-500/20', label: 'Indigo' },
-  { id: 'purple', bg: 'bg-violet-500/10', border: 'border-violet-500/20', label: 'Purple' },
-  { id: 'pink', bg: 'bg-pink-500/10', border: 'border-pink-500/20', label: 'Pink' },
+  { id: 'default', bg: 'bg-gradient-to-br from-card to-card border-border/50', border: 'border-border/50 shadow-sm', label: 'Default' },
+  { id: 'red', bg: 'bg-gradient-to-br from-red-500/10 to-rose-500/5', border: 'border-red-500/20 shadow-sm shadow-red-500/5', label: 'Red' },
+  { id: 'orange', bg: 'bg-gradient-to-br from-orange-500/10 to-amber-500/5', border: 'border-orange-500/20 shadow-sm shadow-orange-500/5', label: 'Orange' },
+  { id: 'amber', bg: 'bg-gradient-to-br from-amber-500/10 to-yellow-500/5', border: 'border-amber-500/20 shadow-sm shadow-amber-500/5', label: 'Amber' },
+  { id: 'green', bg: 'bg-gradient-to-br from-emerald-500/10 to-green-500/5', border: 'border-emerald-500/20 shadow-sm shadow-emerald-500/5', label: 'Green' },
+  { id: 'teal', bg: 'bg-gradient-to-br from-teal-500/10 to-cyan-500/5', border: 'border-teal-500/20 shadow-sm shadow-teal-500/5', label: 'Teal' },
+  { id: 'blue', bg: 'bg-gradient-to-br from-blue-500/10 to-indigo-500/5', border: 'border-blue-500/20 shadow-sm shadow-blue-500/5', label: 'Blue' },
+  { id: 'indigo', bg: 'bg-gradient-to-br from-indigo-500/10 to-violet-500/5', border: 'border-indigo-500/20 shadow-sm shadow-indigo-500/5', label: 'Indigo' },
+  { id: 'purple', bg: 'bg-gradient-to-br from-violet-500/10 to-purple-500/5', border: 'border-violet-500/20 shadow-sm shadow-violet-500/5', label: 'Purple' },
+  { id: 'pink', bg: 'bg-gradient-to-br from-pink-500/10 to-rose-500/5', border: 'border-pink-500/20 shadow-sm shadow-pink-500/5', label: 'Pink' },
 ];
 
 // Sortable Checklist Item Component
@@ -145,10 +145,26 @@ const TaskCard = ({ task, onClick, onColorUpdate, onDelete, onEdit, onReset, onT
           </Button>
         </div>
 
-        <div className="p-4 flex-1">
-          <h3 className="font-semibold text-xl mb-3 break-words pr-8 flex items-center gap-2">
-            {task.title}
-          </h3>
+        <div className="p-4 flex-1 flex flex-col">
+          <div className="flex items-start justify-between gap-2 mb-2 pr-8">
+            <h3 className="font-semibold text-xl break-words leading-tight flex items-center gap-2">
+              {task.title}
+            </h3>
+          </div>
+          <div className="flex flex-wrap gap-2 mb-3">
+            {task.priority === 3 && <span className="inline-flex items-center gap-1 text-[10px] uppercase font-bold tracking-wider text-red-500 bg-red-500/10 px-2 py-0.5 rounded-full"><Flag className="w-3 h-3" /> High Priority</span>}
+            {task.priority === 2 && <span className="inline-flex items-center gap-1 text-[10px] uppercase font-bold tracking-wider text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded-full"><Flag className="w-3 h-3" /> Medium Priority</span>}
+            {task.priority === 1 && <span className="inline-flex items-center gap-1 text-[10px] uppercase font-bold tracking-wider text-blue-500 bg-blue-500/10 px-2 py-0.5 rounded-full"><Flag className="w-3 h-3" /> Low Priority</span>}
+            {task.due_date && (
+              <span className={cn("inline-flex items-center gap-1 text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full border",
+                task.due_date < new Date().toISOString().split('T')[0] ? "text-destructive border-destructive/30 bg-destructive/10" : "text-primary border-primary/30 bg-primary/10"
+              )}>
+                <Calendar className="w-3 h-3" />
+                {task.due_date < new Date().toISOString().split('T')[0] ? 'Overdue: ' : 'Due: '}
+                {format(new Date(task.due_date), 'MMM d, yyyy')}
+              </span>
+            )}
+          </div>
           <Separator className="mb-2" />
           <div className="space-y-1">
             {activeItems.map((item, idx) => (
@@ -206,11 +222,15 @@ export const Tasks = () => {
   const [quickTitle, setQuickTitle] = useState('');
   const [quickColor, setQuickColor] = useState('default');
   const [checklistItems, setChecklistItems] = useState([{ text: '', completed: false }]);
+  const [quickDueDate, setQuickDueDate] = useState('');
+  const [quickPriority, setQuickPriority] = useState('2');
 
   // Edit Form State
   const [editTitle, setEditTitle] = useState('');
   const [editColor, setEditColor] = useState('default');
   const [editChecklistItems, setEditChecklistItems] = useState([]);
+  const [editDueDate, setEditDueDate] = useState('');
+  const [editPriority, setEditPriority] = useState('2');
 
   // DnD Sensors
   const sensors = useSensors(
@@ -223,7 +243,19 @@ export const Tasks = () => {
       const response = await api.get('/tasks');
       // Keep position sorting for stability, but we removed drag
       const tasksWithPos = response.data.map((t, i) => ({ ...t, position: t.position ?? i }));
-      setTasks(tasksWithPos.sort((a, b) => a.position - b.position));
+      setTasks(tasksWithPos.sort((a, b) => {
+        const pA = a.priority || 2;
+        const pB = b.priority || 2;
+        if (pA !== pB) return pB - pA;
+        if (a.due_date && b.due_date) {
+          return a.due_date.localeCompare(b.due_date);
+        } else if (a.due_date) {
+          return -1;
+        } else if (b.due_date) {
+          return 1;
+        }
+        return a.position - b.position;
+      }));
     } catch (error) {
       toast.error('Failed to fetch tasks');
     } finally {
@@ -268,7 +300,8 @@ export const Tasks = () => {
       checklist: validItems,
       color: COLORS.find(c => c.id === quickColor)?.bg || 'bg-card',
       category: 'daily',
-      priority: 2,
+      priority: parseInt(quickPriority),
+      due_date: quickDueDate || null,
       position: tasks.length // Append to end
     };
 
@@ -278,6 +311,8 @@ export const Tasks = () => {
       setQuickTitle('');
       setQuickColor('default');
       setChecklistItems([{ text: '', completed: false }]);
+      setQuickDueDate('');
+      setQuickPriority('2');
       setIsQuickAddExpanded(false);
       fetchTasks();
     } catch (error) {
@@ -292,7 +327,9 @@ export const Tasks = () => {
     const taskData = {
       title: editTitle,
       color: COLORS.find(c => c.id === editColor)?.bg || 'bg-card',
-      checklist: editChecklistItems.filter(i => i.text.trim() !== '')
+      checklist: editChecklistItems.filter(i => i.text.trim() !== ''),
+      priority: parseInt(editPriority),
+      due_date: editDueDate || null,
     };
 
     try {
@@ -324,6 +361,8 @@ export const Tasks = () => {
     setEditChecklistItems((task.checklist || []).map((item, idx) => ({ ...item, id: `item-${idx}-${Date.now()}` })));
     const colorObj = COLORS.find(c => c.bg === task.color) || COLORS[0];
     setEditColor(colorObj.id);
+    setEditDueDate(task.due_date || '');
+    setEditPriority(task.priority?.toString() || '2');
     setDialogOpen(true);
   };
 
@@ -443,8 +482,8 @@ export const Tasks = () => {
                 </div>
               </div>
 
-              <div className="flex items-center justify-between pt-3 border-t border-border/40">
-                <div className="flex gap-2">
+              <div className="flex items-center justify-between pt-3 border-t border-border/40 flex-wrap gap-2">
+                <div className="flex gap-2 flex-wrap">
                   <Popover>
                     <PopoverTrigger asChild><Button type="button" variant="ghost" size="icon" className="h-8 w-8 rounded-full"><Palette className="w-4 h-4 text-muted-foreground" /></Button></PopoverTrigger>
                     <PopoverContent className="w-auto p-2" align="start">
@@ -455,6 +494,22 @@ export const Tasks = () => {
                       </div>
                     </PopoverContent>
                   </Popover>
+
+                  <div className="flex items-center gap-1 border border-border/50 rounded-md bg-background/50 px-2 py-1">
+                    <Calendar className="w-3 h-3 text-muted-foreground" />
+                    <input type="date" value={quickDueDate} onChange={e => setQuickDueDate(e.target.value)} className="bg-transparent border-none text-xs text-muted-foreground focus:outline-none w-28 h-5" />
+                  </div>
+
+                  <Select value={quickPriority} onValueChange={setQuickPriority}>
+                    <SelectTrigger className="h-7 border-border/50 bg-background/50 text-xs w-24">
+                      <SelectValue placeholder="Priority" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="3"><span className="flex items-center gap-1 text-red-500"><Flag className="w-3 h-3" /> High</span></SelectItem>
+                      <SelectItem value="2"><span className="flex items-center gap-1 text-amber-500"><Flag className="w-3 h-3" /> Med</span></SelectItem>
+                      <SelectItem value="1"><span className="flex items-center gap-1 text-blue-500"><Flag className="w-3 h-3" /> Low</span></SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="flex gap-2">
                   <Button type="button" variant="ghost" size="sm" onClick={() => { setIsQuickAddExpanded(false); }}>Close</Button>
@@ -551,7 +606,30 @@ export const Tasks = () => {
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader><DialogTitle>Edit List</DialogTitle></DialogHeader>
           <form onSubmit={handleUpdate} className="space-y-4 mt-2">
-            <Input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} placeholder="Title" className="text-xl font-semibold" required />
+            <Input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} placeholder="Title" className="text-xl font-semibold border-none px-0 shadow-none focus-visible:ring-0" required />
+
+            <div className="flex gap-4">
+              <div className="flex-1 space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Due Date</Label>
+                <div className="flex items-center gap-2 border border-border rounded-md px-3 py-2 bg-background">
+                  <Calendar className="w-4 h-4 text-muted-foreground" />
+                  <input type="date" value={editDueDate} onChange={e => setEditDueDate(e.target.value)} className="bg-transparent border-none text-sm focus:outline-none w-full" />
+                </div>
+              </div>
+              <div className="flex-1 space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Priority</Label>
+                <Select value={editPriority} onValueChange={setEditPriority}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Priority" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="3"><span className="flex items-center gap-2 text-red-500"><Flag className="w-4 h-4" /> High Priority</span></SelectItem>
+                    <SelectItem value="2"><span className="flex items-center gap-2 text-amber-500"><Flag className="w-4 h-4" /> Medium Priority</span></SelectItem>
+                    <SelectItem value="1"><span className="flex items-center gap-2 text-blue-500"><Flag className="w-4 h-4" /> Low Priority</span></SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
 
             <div className="max-h-[50vh] overflow-y-auto pr-2">
               <DndContext

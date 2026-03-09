@@ -1,13 +1,14 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../components/ui/dropdown-menu';
+import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover';
 import { toast } from 'sonner';
 import {
   Plus, Upload, Download, Trash2, Check, X, FileSpreadsheet,
-  MoreHorizontal, Pencil, ChevronUp, ChevronDown
+  MoreHorizontal, Pencil, ChevronUp, ChevronDown, Filter
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -27,6 +28,8 @@ export const Budget = () => {
   const [deleteConfirm, setDeleteConfirm] = useState(null); // sheet obj
   const [sortField, setSortField] = useState(null);
   const [sortDir, setSortDir] = useState('asc');
+  const [filterStartDate, setFilterStartDate] = useState('');
+  const [filterEndDate, setFilterEndDate] = useState('');
   const csvInputRef = useRef(null);
 
   // Fetch sheets
@@ -103,7 +106,8 @@ export const Budget = () => {
 
   // --- Row actions ---
   const startNewRow = () => {
-    setNewRow({ date: '', description: '', credit: '', debit: '' });
+    const today = new Date().toISOString().split('T')[0];
+    setNewRow({ date: today, description: '', credit: '', debit: '' });
   };
 
   const saveNewRow = async () => {
@@ -199,7 +203,7 @@ export const Budget = () => {
     }
   };
 
-  // --- Sorting ---
+  // --- Filtering & Sorting ---
   const handleSort = (field) => {
     if (sortField === field) {
       setSortDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -216,20 +220,35 @@ export const Budget = () => {
       : <ChevronDown className="w-3 h-3 inline ml-0.5" />;
   };
 
-  const sortedRows = [...rows].sort((a, b) => {
-    if (!sortField) return 0;
-    let cmp = 0;
-    if (sortField === 'date' || sortField === 'description') {
-      cmp = (a[sortField] || '').localeCompare(b[sortField] || '');
-    } else {
-      cmp = (a[sortField] || 0) - (b[sortField] || 0);
+  const processedRows = useMemo(() => {
+    let result = [...rows];
+
+    // 1. Filter
+    if (filterStartDate) {
+      result = result.filter(r => r.date >= filterStartDate);
     }
-    return sortDir === 'asc' ? cmp : -cmp;
-  });
+    if (filterEndDate) {
+      result = result.filter(r => r.date <= filterEndDate);
+    }
+
+    // 2. Sort
+    result.sort((a, b) => {
+      if (!sortField) return 0;
+      let cmp = 0;
+      if (sortField === 'date' || sortField === 'description') {
+        cmp = (a[sortField] || '').localeCompare(b[sortField] || '');
+      } else {
+        cmp = (a[sortField] || 0) - (b[sortField] || 0);
+      }
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+
+    return result;
+  }, [rows, sortField, sortDir, filterStartDate, filterEndDate]);
 
   // --- Totals ---
-  const totalCredit = rows.reduce((s, r) => s + (r.credit || 0), 0);
-  const totalDebit = rows.reduce((s, r) => s + (r.debit || 0), 0);
+  const totalCredit = processedRows.reduce((s, r) => s + (r.credit || 0), 0);
+  const totalDebit = processedRows.reduce((s, r) => s + (r.debit || 0), 0);
 
   const formatNum = (n) => {
     if (!n && n !== 0) return '';
@@ -247,14 +266,52 @@ export const Budget = () => {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-80px)]" data-testid="budget-page">
-      {/* Header */}
+    <div className="flex flex-col h-[calc(100vh-2rem)]" data-testid="budget-page">
+      {/* Header: Sheet Tabs (left) + Import/Export (right) */}
       <div className="flex items-center justify-between px-1 pb-2">
-        <p className="text-sm text-muted-foreground">
-          {activeSheet ? activeSheet.name : 'Create a sheet to start'}
-        </p>
+        <div className="flex items-center gap-1 overflow-x-auto">
+          {sheets.map(sheet => (
+            <div key={sheet.id} className="flex items-center group">
+              <button
+                onClick={() => setActiveSheetId(sheet.id)}
+                className={`px-4 py-2 text-sm font-medium rounded-lg transition-all whitespace-nowrap border ${activeSheetId === sheet.id
+                  ? 'bg-card text-foreground border-border/50 shadow-sm'
+                  : 'bg-muted/30 text-muted-foreground hover:text-foreground hover:bg-muted/50 border-transparent'
+                  }`}
+              >
+                {sheet.name}
+              </button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className={`p-1 rounded transition-opacity ${activeSheetId === sheet.id ? 'opacity-60 hover:opacity-100' : 'opacity-0 group-hover:opacity-60 hover:!opacity-100'
+                    }`}>
+                    <MoreHorizontal className="w-3.5 h-3.5" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="min-w-[120px]">
+                  <DropdownMenuItem onClick={() => { setRenameDialog(sheet); setRenameName(sheet.name); }}>
+                    <Pencil className="w-3.5 h-3.5 mr-2" /> Rename
+                  </DropdownMenuItem>
+                  <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => setDeleteConfirm(sheet)}>
+                    <Trash2 className="w-3.5 h-3.5 mr-2" /> Delete
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          ))}
+          <button
+            onClick={() => setNewSheetDialog(true)}
+            className="px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-lg transition-all border border-transparent"
+            title="Add sheet"
+          >
+            <Plus className="w-4 h-4" />
+          </button>
+        </div>
         {activeSheetId && (
-          <div className="flex gap-2">
+          <div className="flex gap-2 shrink-0 ml-4">
+            <Button variant="outline" size="sm" onClick={startNewRow} className="gap-1.5">
+              <Plus className="w-3.5 h-3.5" /> Add Row
+            </Button>
             <Button variant="outline" size="sm" onClick={() => csvInputRef.current?.click()} className="gap-1.5">
               <Upload className="w-3.5 h-3.5" /> Import
             </Button>
@@ -274,10 +331,37 @@ export const Budget = () => {
             <div className="flex-1 overflow-auto">
               <table className="w-full budget-table">
                 <thead>
-                  <tr className="bg-muted/60 sticky top-0 z-10">
+                  <tr className="bg-muted sticky top-0 z-10">
                     <th className="budget-th w-10 text-center">#</th>
-                    <th className="budget-th w-[140px] cursor-pointer select-none" onClick={() => handleSort('date')}>
-                      Date <SortIcon field="date" />
+                    <th className="budget-th w-[180px] select-none">
+                      <div className="flex items-center justify-between">
+                        <span className="cursor-pointer flex-1" onClick={() => handleSort('date')}>
+                          Date <SortIcon field="date" />
+                        </span>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button variant="ghost" size="icon" className={`h-6 w-6 ml-1 ${(filterStartDate || filterEndDate) ? 'text-primary' : 'text-muted-foreground'} hover:bg-muted-foreground/10`} title="Filter by date">
+                              <Filter className="w-3.5 h-3.5" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-64 p-3" align="start">
+                            <div className="space-y-3">
+                              <h4 className="font-semibold text-sm">Filter by Date</h4>
+                              <div className="space-y-1.5">
+                                <label className="text-xs text-muted-foreground">From</label>
+                                <input type="date" className="budget-cell-input w-full border border-border/50 rounded-md px-2 py-1" value={filterStartDate} onChange={e => setFilterStartDate(e.target.value)} />
+                              </div>
+                              <div className="space-y-1.5">
+                                <label className="text-xs text-muted-foreground">To</label>
+                                <input type="date" className="budget-cell-input w-full border border-border/50 rounded-md px-2 py-1" value={filterEndDate} onChange={e => setFilterEndDate(e.target.value)} />
+                              </div>
+                              <div className="pt-2 flex justify-end">
+                                <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => { setFilterStartDate(''); setFilterEndDate(''); }}>Clear</Button>
+                              </div>
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+                      </div>
                     </th>
                     <th className="budget-th cursor-pointer select-none" onClick={() => handleSort('description')}>
                       Description <SortIcon field="description" />
@@ -292,7 +376,7 @@ export const Budget = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {sortedRows.length === 0 && !newRow && (
+                  {processedRows.length === 0 && !newRow && (
                     <tr>
                       <td colSpan={6} className="text-center py-16 text-muted-foreground/40">
                         <FileSpreadsheet className="w-12 h-12 mx-auto mb-3 opacity-30" />
@@ -309,13 +393,13 @@ export const Budget = () => {
                       </td>
                     </tr>
                   )}
-                  {sortedRows.map((r, idx) => (
+                  {processedRows.map((r, idx) => (
                     <tr key={r.id} className={`budget-row group ${idx % 2 === 0 ? 'bg-card/20' : ''}`}>
                       <td className="budget-td text-center text-muted-foreground/40 text-xs font-mono">{idx + 1}</td>
                       {/* Date */}
                       <td className="budget-td">
                         {editingCell?.rowId === r.id && editingCell?.field === 'date' ? (
-                          <input type="text" value={editValue} onChange={e => setEditValue(e.target.value)}
+                          <input type="date" value={editValue} onChange={e => setEditValue(e.target.value)}
                             onKeyDown={handleKeyDown} onBlur={saveEdit} className="budget-cell-input" autoFocus />
                         ) : (
                           <span className="cursor-pointer hover:text-primary text-sm" onClick={() => startEdit(r.id, 'date', r.date)}>
@@ -374,8 +458,8 @@ export const Budget = () => {
                     <tr className="budget-row bg-primary/5 border-t-2 border-primary/20">
                       <td className="budget-td text-center text-muted-foreground/40 text-xs font-mono">+</td>
                       <td className="budget-td">
-                        <input type="text" value={newRow.date} onChange={e => setNewRow({ ...newRow, date: e.target.value })}
-                          placeholder="Date..." className="budget-cell-input" autoFocus onKeyDown={handleNewRowKeyDown} />
+                        <input type="date" value={newRow.date} onChange={e => setNewRow({ ...newRow, date: e.target.value })}
+                          className="budget-cell-input" autoFocus onKeyDown={handleNewRowKeyDown} />
                       </td>
                       <td className="budget-td">
                         <input type="text" value={newRow.description} onChange={e => setNewRow({ ...newRow, description: e.target.value })}
@@ -402,36 +486,25 @@ export const Budget = () => {
                     </tr>
                   )}
                 </tbody>
-
-                {/* Totals Footer */}
-                {rows.length > 0 && (
-                  <tfoot>
-                    <tr className="bg-muted/40 border-t-2 border-border/50">
-                      <td className="budget-td" colSpan={3}>
-                        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Total ({rows.length} rows)</span>
-                      </td>
-                      <td className="budget-td text-right">
-                        <span className="font-mono font-bold text-sm text-emerald-500">{formatNum(totalCredit)}</span>
-                      </td>
-                      <td className="budget-td text-right">
-                        <span className="font-mono font-bold text-sm text-red-500">{formatNum(totalDebit)}</span>
-                      </td>
-                      <td className="budget-td"></td>
-                    </tr>
-                  </tfoot>
-                )}
               </table>
             </div>
 
-            {/* Add Row Bar */}
-            {!newRow && (
-              <div className="bg-muted/30 px-4 py-2 border-t border-border/50 flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">{rows.length} row{rows.length !== 1 ? 's' : ''}</span>
-                <Button variant="ghost" size="sm" onClick={startNewRow} className="text-xs text-muted-foreground hover:text-foreground gap-1">
-                  <Plus className="w-3 h-3" /> Add row
-                </Button>
+            {/* Totals Footer Bar */}
+            <div className="bg-muted/40 px-4 py-2.5 border-t-2 border-border/50 flex items-center justify-start gap-8">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Total:</span>
+                <span className="font-mono font-bold text-sm text-blue-500">{formatNum(totalCredit - totalDebit)}</span>
+
               </div>
-            )}
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground uppercase">Credit:</span>
+                <span className="font-mono font-bold text-sm text-emerald-500">{formatNum(totalCredit)}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground uppercase">Debit:</span>
+                <span className="font-mono font-bold text-sm text-red-500">{formatNum(totalDebit)}</span>
+              </div>
+            </div>
           </>
         ) : (
           <div className="flex-1 flex items-center justify-center text-muted-foreground/40">
@@ -447,45 +520,7 @@ export const Budget = () => {
         )}
       </div>
 
-      {/* Sheet Tabs — Bottom Bar */}
-      <div className="flex items-center gap-1 mt-2 overflow-x-auto pb-1">
-        {sheets.map(sheet => (
-          <div key={sheet.id} className="flex items-center group">
-            <button
-              onClick={() => setActiveSheetId(sheet.id)}
-              className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-all whitespace-nowrap border border-b-0 ${activeSheetId === sheet.id
-                ? 'bg-card text-foreground border-border/50 shadow-sm'
-                : 'bg-muted/30 text-muted-foreground hover:text-foreground hover:bg-muted/50 border-transparent'
-                }`}
-            >
-              {sheet.name}
-            </button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button className={`p-1 rounded transition-opacity ${activeSheetId === sheet.id ? 'opacity-60 hover:opacity-100' : 'opacity-0 group-hover:opacity-60 hover:!opacity-100'
-                  }`}>
-                  <MoreHorizontal className="w-3.5 h-3.5" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="min-w-[120px]">
-                <DropdownMenuItem onClick={() => { setRenameDialog(sheet); setRenameName(sheet.name); }}>
-                  <Pencil className="w-3.5 h-3.5 mr-2" /> Rename
-                </DropdownMenuItem>
-                <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => setDeleteConfirm(sheet)}>
-                  <Trash2 className="w-3.5 h-3.5 mr-2" /> Delete
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        ))}
-        <button
-          onClick={() => setNewSheetDialog(true)}
-          className="px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-t-lg transition-all border border-transparent"
-          title="Add sheet"
-        >
-          <Plus className="w-4 h-4" />
-        </button>
-      </div>
+
 
       {/* New Sheet Dialog */}
       <Dialog open={newSheetDialog} onOpenChange={setNewSheetDialog}>

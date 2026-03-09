@@ -603,9 +603,28 @@ async def update_task(task_id: str, data: TaskUpdate, user: dict = Depends(get_c
         raise HTTPException(status_code=404, detail="Task not found")
     
     update_data = {k: v for k, v in data.model_dump().items() if v is not None}
-    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(timezone.utc).isoformat()
+    update_data["updated_at"] = now
     
-    await db.tasks.update_one({"id": task_id}, {"$set": update_data})
+    old_status = task.get("status", "pending")
+    new_status = update_data.get("status", old_status)
+    
+    # Handle status transition: non-completed -> completed
+    if new_status == "completed" and old_status != "completed":
+        update_data["completed_at"] = now
+        await db.tasks.update_one({"id": task_id}, {"$set": update_data})
+        
+        # Trigger gamification side effects
+        xp_reward = 10 + (task.get("priority", 1) * 10)
+        await add_xp(user["id"], xp_reward)
+        await update_streak(user["id"])
+        await update_daily_activity(user["id"], "tasks_completed")
+    # Handle status transition: completed -> non-completed (undo)
+    elif old_status == "completed" and new_status != "completed":
+        update_data["completed_at"] = None
+        await db.tasks.update_one({"id": task_id}, {"$set": update_data})
+    else:
+        await db.tasks.update_one({"id": task_id}, {"$set": update_data})
     
     updated_task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
     return updated_task

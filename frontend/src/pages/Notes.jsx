@@ -16,6 +16,8 @@ import Link from '@tiptap/extension-link';
 import Image from '@tiptap/extension-image';
 import Youtube from '@tiptap/extension-youtube';
 import Placeholder from '@tiptap/extension-placeholder';
+import Mention from '@tiptap/extension-mention';
+import createSuggestion from '../extensions/suggestion';
 import Instagram from '../extensions/Instagram';
 import {
   Plus, FileText, MoreVertical, Trash2, Edit, Star, StarOff,
@@ -222,10 +224,13 @@ export const Notes = () => {
   const sidebarRef = useRef(null);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
-  // Refs for Auto-save
+  // Refs for Auto-save & Editor Context
   const saveTimeoutRef = useRef(null);
   const selectedNoteIdRef = useRef(selectedNoteId);
   const saveContentRef = useRef(null);
+  const notesRef = useRef(notes);
+
+  useEffect(() => { notesRef.current = notes; }, [notes]);
 
   useEffect(() => { selectedNoteIdRef.current = selectedNoteId; }, [selectedNoteId]);
 
@@ -237,6 +242,20 @@ export const Notes = () => {
       Image.configure({ inline: true }),
       Youtube.configure({ width: 640, height: 360, controls: true }),
       Instagram.configure({ width: 400, height: 500 }),
+      Mention.configure({
+        HTMLAttributes: {
+          class: 'mention bg-primary/20 text-primary px-1.5 py-0.5 rounded-sm cursor-pointer font-medium hover:bg-primary/30 transition-colors',
+        },
+        suggestion: createSuggestion(({ query }) => {
+          const allNotes = notesRef.current || [];
+          const q = query.toLowerCase();
+          const matches = allNotes.filter(item => item.title?.toLowerCase().includes(q)).slice(0, 5);
+          if (query.length > 0) {
+            matches.push({ id: 'new', title: query, isNew: true });
+          }
+          return matches;
+        })
+      }),
       Placeholder.configure({ placeholder: 'Start writing...' })
     ],
     content: '',
@@ -250,13 +269,67 @@ export const Notes = () => {
           setIsLightboxOpen(true);
           return true;
         }
+        if (node && node.type && node.type.name === 'mention') {
+          const id = node.attrs.id;
+          if (id) {
+            window.dispatchEvent(new CustomEvent('open-note', { detail: { id } }));
+          }
+          return true;
+        }
         return false;
+      },
+      createNoteHandler: async (title) => {
+        try {
+          const res = await api.post('/notes', {
+            title: title || 'Untitled',
+            content: '',
+            parent_id: selectedNoteIdRef.current
+          });
+          window.dispatchEvent(new CustomEvent('note-created', { detail: { note: res.data } }));
+          return res.data;
+        } catch (e) {
+          toast.error('Failed to create sub-page inline');
+          return null;
+        }
       }
     },
     onUpdate: ({ editor }) => {
       // Debounced save could go here
     }
   });
+
+  // Handle events from inline mentions
+  useEffect(() => {
+    const handleOpenNote = (e) => {
+      const id = e.detail.id;
+      const note = notesRef.current.find(n => n.id === id);
+      if (note) {
+        if (selectedNoteIdRef.current && editor) {
+          if (saveContentRef.current) saveContentRef.current(selectedNoteIdRef.current, editor.getHTML());
+        }
+        setSelectedNoteId(note.id);
+        if (note.parent_id) {
+          setExpandedIds(prev => prev.includes(note.parent_id) ? prev : [...prev, note.parent_id]);
+        }
+      }
+    };
+
+    const handleNoteCreated = (e) => {
+      const newNote = e.detail.note;
+      setNotes(prev => [...prev, newNote]);
+      if (newNote.parent_id) {
+        setExpandedIds(prev => prev.includes(newNote.parent_id) ? prev : [...prev, newNote.parent_id]);
+      }
+      toast.success('Sub-page inline created');
+    };
+
+    window.addEventListener('open-note', handleOpenNote);
+    window.addEventListener('note-created', handleNoteCreated);
+    return () => {
+      window.removeEventListener('open-note', handleOpenNote);
+      window.removeEventListener('note-created', handleNoteCreated);
+    };
+  }, [editor]);
 
   const fetchNotes = useCallback(async () => {
     try {
