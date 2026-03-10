@@ -1,7 +1,6 @@
 import { ReactRenderer } from '@tiptap/react';
 import tippy from 'tippy.js';
 import 'tippy.js/dist/tippy.css';
-import 'tippy.js/themes/light-border.css';
 import 'tippy.js/animations/scale-subtle.css';
 import { MentionList } from './MentionList';
 
@@ -31,7 +30,6 @@ export default function createSuggestion(getItems) {
                         interactive: true,
                         trigger: 'manual',
                         placement: 'bottom-start',
-                        theme: 'light-border',
                         animation: 'scale-subtle',
                     });
                 },

@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field, ConfigDict, EmailStr
 from typing import List, Optional
 import uuid
 from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
 import csv
 from pymongo import UpdateOne
 import io
@@ -28,7 +29,9 @@ client = AsyncIOMotorClient(mongo_url, tlsCAFile=certifi.where())
 db = client[os.environ['DB_NAME']]
 
 # JWT Config
-JWT_SECRET = os.environ.get('JWT_SECRET', 'lifeos-secret-key-change-in-production')
+JWT_SECRET = os.environ.get('JWT_SECRET')
+if not JWT_SECRET:
+    raise RuntimeError("JWT_SECRET environment variable is required. Set it in .env")
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_HOURS = 24
 
@@ -249,7 +252,7 @@ def create_token(user_id: str, email: str) -> str:
     payload = {
         "sub": user_id,
         "email": email,
-        "exp": datetime.now(timezone.utc) + timedelta(hours=JWT_EXPIRATION_HOURS)
+        "exp": datetime.now(ZoneInfo("Asia/Kolkata")) + timedelta(hours=JWT_EXPIRATION_HOURS)
     }
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
@@ -290,8 +293,8 @@ async def add_xp(user_id: str, xp_amount: int):
         )
 
 async def update_streak(user_id: str):
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    yesterday = (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%d")
+    today = datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%Y-%m-%d")
+    yesterday = (datetime.now(ZoneInfo("Asia/Kolkata")) - timedelta(days=1)).strftime("%Y-%m-%d")
     
     user = await db.users.find_one({"id": user_id}, {"_id": 0})
     if not user:
@@ -327,7 +330,7 @@ async def update_streak(user_id: str):
         )
 
 async def update_daily_activity(user_id: str, field: str, increment: int = 1):
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    today = datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%Y-%m-%d")
     
     existing = await db.daily_activity.find_one({"user_id": user_id, "date": today}, {"_id": 0})
     
@@ -348,28 +351,40 @@ async def update_daily_activity(user_id: str, field: str, increment: int = 1):
         activity[field] = increment
         await db.daily_activity.insert_one(activity)
 
+ALLOWED_IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.bmp', '.ico'}
+MAX_UPLOAD_SIZE = 5 * 1024 * 1024  # 5MB
+
 @api_router.post("/upload", response_model=UploadResponse)
 async def upload_file(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
-    """Upload a file and return its URL."""
+    """Upload an image file and return its URL."""
     try:
+        # Validate file extension
+        ext = Path(file.filename).suffix.lower()
+        if ext not in ALLOWED_IMAGE_EXTENSIONS:
+            raise HTTPException(status_code=400, detail=f"File type '{ext}' not allowed. Allowed: {', '.join(ALLOWED_IMAGE_EXTENSIONS)}")
+
+        # Validate file size
+        content = await file.read()
+        if len(content) > MAX_UPLOAD_SIZE:
+            raise HTTPException(status_code=400, detail=f"File too large. Maximum size is {MAX_UPLOAD_SIZE // (1024*1024)}MB")
+
         # Create upload directory if not exists
         upload_dir = ROOT_DIR / "static" / "uploads"
         upload_dir.mkdir(parents=True, exist_ok=True)
         
         # Generate unique filename
-        ext = Path(file.filename).suffix
         filename = f"{uuid.uuid4()}{ext}"
         filepath = upload_dir / filename
         
         # Save file
         with open(filepath, "wb") as buffer:
-            content = await file.read()
             buffer.write(content)
             
         # Return URL
-        # Assuming server runs on root or typical setup
         url = f"/static/uploads/{filename}"
         return UploadResponse(url=url)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"File upload error: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to upload file: {str(e)}")
@@ -388,7 +403,7 @@ async def register(data: UserCreate):
         raise HTTPException(status_code=400, detail="Username already taken")
     
     user_id = str(uuid.uuid4())
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(ZoneInfo("Asia/Kolkata")).isoformat()
     
     user_doc = {
         "id": user_id,
@@ -454,6 +469,22 @@ async def get_me(user: dict = Depends(get_current_user)):
         created_at=user["created_at"]
     )
 
+@api_router.post("/auth/refresh", response_model=TokenResponse)
+async def refresh_token(user: dict = Depends(get_current_user)):
+    """Issue a new token for an authenticated user (before current token expires)."""
+    token = create_token(user["id"], user["email"])
+    user_response = UserResponse(
+        id=user["id"],
+        email=user["email"],
+        username=user["username"],
+        current_level=user.get("current_level", 1),
+        total_xp=user.get("total_xp", 0),
+        current_streak=user.get("current_streak", 0),
+        longest_streak=user.get("longest_streak", 0),
+        created_at=user["created_at"]
+    )
+    return TokenResponse(access_token=token, user=user_response)
+
 # ============ TASK ROUTES ============
 
 @api_router.get("/tasks", response_model=List[TaskResponse])
@@ -467,7 +498,7 @@ async def get_tasks(status: Optional[str] = None, user: dict = Depends(get_curre
 
 @api_router.post("/tasks", response_model=TaskResponse)
 async def create_task(data: TaskCreate, user: dict = Depends(get_current_user)):
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(ZoneInfo("Asia/Kolkata")).isoformat()
     task_id = str(uuid.uuid4())
     
     task_doc = {
@@ -508,7 +539,7 @@ async def update_task(task_id: str, data: TaskUpdate, user: dict = Depends(get_c
         raise HTTPException(status_code=404, detail="Task not found")
     
     update_data = {k: v for k, v in data.model_dump().items() if v is not None}
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(ZoneInfo("Asia/Kolkata")).isoformat()
     update_data["updated_at"] = now
     
     old_status = task.get("status", "pending")
@@ -553,7 +584,7 @@ async def complete_task(task_id: str, user: dict = Depends(get_current_user)):
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(ZoneInfo("Asia/Kolkata")).isoformat()
     
     await db.tasks.update_one(
         {"id": task_id},
@@ -597,7 +628,7 @@ async def get_notes(category: Optional[str] = None, user: dict = Depends(get_cur
 
 @api_router.post("/notes", response_model=NoteResponse)
 async def create_note(data: NoteCreate, user: dict = Depends(get_current_user)):
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(ZoneInfo("Asia/Kolkata")).isoformat()
     note_id = str(uuid.uuid4())
     
     note_doc = {
@@ -635,7 +666,7 @@ async def update_note(note_id: str, data: NoteUpdate, user: dict = Depends(get_c
         raise HTTPException(status_code=404, detail="Note not found")
     
     update_data = {k: v for k, v in data.model_dump().items() if v is not None}
-    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    update_data["updated_at"] = datetime.now(ZoneInfo("Asia/Kolkata")).isoformat()
     
     await db.notes.update_one({"id": note_id}, {"$set": update_data})
     
@@ -662,7 +693,7 @@ async def get_sheets(user: dict = Depends(get_current_user)):
 
 @api_router.post("/budget/sheets")
 async def create_sheet(data: BudgetSheetCreate, user: dict = Depends(get_current_user)):
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(ZoneInfo("Asia/Kolkata")).isoformat()
     count = await db.budget_sheets.count_documents({"user_id": user["id"]})
     sheet_doc = {
         "id": str(uuid.uuid4()),
@@ -707,7 +738,7 @@ async def create_row(sheet_id: str, data: BudgetRowCreate, user: dict = Depends(
     sheet = await db.budget_sheets.find_one({"id": sheet_id, "user_id": user["id"]})
     if not sheet:
         raise HTTPException(status_code=404, detail="Sheet not found")
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(ZoneInfo("Asia/Kolkata")).isoformat()
     count = await db.budget_rows.count_documents({"sheet_id": sheet_id, "user_id": user["id"]})
     row_doc = {
         "id": str(uuid.uuid4()),
@@ -760,7 +791,7 @@ async def import_sheet_csv(sheet_id: str, file: UploadFile = File(...), user: di
         reader = csv.DictReader(io.StringIO(text))
         
         imported = 0
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(ZoneInfo("Asia/Kolkata")).isoformat()
         current_order = await db.budget_rows.count_documents({"sheet_id": sheet_id, "user_id": user["id"]})
         
         for row in reader:
@@ -836,7 +867,7 @@ async def export_sheet_csv(sheet_id: str, user: dict = Depends(get_current_user)
 
 @api_router.post("/focus/start", response_model=FocusSessionResponse)
 async def start_focus_session(data: FocusSessionCreate, user: dict = Depends(get_current_user)):
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(ZoneInfo("Asia/Kolkata")).isoformat()
     session_id = str(uuid.uuid4())
     
     session_doc = {
@@ -859,7 +890,7 @@ async def complete_focus_session(session_id: str, data: FocusSessionComplete, us
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(ZoneInfo("Asia/Kolkata")).isoformat()
     
     await db.focus_sessions.update_one(
         {"id": session_id},
@@ -896,7 +927,7 @@ async def get_focus_stats(user: dict = Depends(get_current_user)):
     total_time = sum(s.get("duration_actual", 0) for s in sessions)
     total_sessions = len(sessions)
     
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    today = datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%Y-%m-%d")
     today_sessions = [s for s in sessions if s["started_at"].startswith(today)]
     today_time = sum(s.get("duration_actual", 0) for s in today_sessions)
     
@@ -912,7 +943,7 @@ async def get_focus_stats(user: dict = Depends(get_current_user)):
 @api_router.get("/habits", response_model=List[HabitResponse])
 async def get_habits(user: dict = Depends(get_current_user)):
     """Get all habits for user. Auto-resets completion status if new day."""
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    today = datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%Y-%m-%d")
     habits = await db.habits.find({"user_id": user["id"]}, {"_id": 0}).sort("order", 1).to_list(100)
     
     updated_habits = []
@@ -933,7 +964,7 @@ async def get_habits(user: dict = Depends(get_current_user)):
 @api_router.post("/habits", response_model=HabitResponse)
 async def create_habit(data: HabitCreate, user: dict = Depends(get_current_user)):
     """Create a new habit."""
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(ZoneInfo("Asia/Kolkata")).isoformat()
     habit_id = str(uuid.uuid4())
     
     # Get max order for user's habits
@@ -975,8 +1006,8 @@ async def update_habit(habit_id: str, data: HabitUpdate, user: dict = Depends(ge
     
     # Handle completion toggle with streak logic
     if data.is_completed is not None:
-        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-        yesterday = (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%d")
+        today = datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%Y-%m-%d")
+        yesterday = (datetime.now(ZoneInfo("Asia/Kolkata")) - timedelta(days=1)).strftime("%Y-%m-%d")
         
         if data.is_completed:
             # Marking as complete
@@ -1048,7 +1079,7 @@ async def get_dashboard_stats(user: dict = Depends(get_current_user)):
 
 @api_router.get("/dashboard/activity", response_model=List[DailyActivityResponse])
 async def get_activity_data(days: int = 365, user: dict = Depends(get_current_user)):
-    start_date = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%d")
+    start_date = (datetime.now(ZoneInfo("Asia/Kolkata")) - timedelta(days=days)).strftime("%Y-%m-%d")
     
     activities = await db.daily_activity.find(
         {"user_id": user["id"], "date": {"$gte": start_date}},
@@ -1108,7 +1139,7 @@ async def check_achievements(user_id: str):
             unlocked = notes_count >= ach["requirement"]
         
         if unlocked:
-            now = datetime.now(timezone.utc).isoformat()
+            now = datetime.now(ZoneInfo("Asia/Kolkata")).isoformat()
             await db.user_achievements.insert_one({
                 "id": str(uuid.uuid4()),
                 "user_id": user_id,
@@ -1151,7 +1182,7 @@ async def get_achievements(user: dict = Depends(get_current_user)):
         
         # Check if already in db and if not, add it
         if unlocked and ach["id"] not in unlocked_ids:
-            now = datetime.now(timezone.utc).isoformat()
+            now = datetime.now(ZoneInfo("Asia/Kolkata")).isoformat()
             await db.user_achievements.insert_one({
                 "id": str(uuid.uuid4()),
                 "user_id": user["id"],
@@ -1179,7 +1210,7 @@ async def get_achievements(user: dict = Depends(get_current_user)):
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=[origin.strip() for origin in os.environ.get('CORS_ORIGINS', '*').split(',')],
+    allow_origins=[origin.strip() for origin in os.environ.get('CORS_ORIGINS', '').split(',') if origin.strip()],
     allow_methods=["*"],
     allow_headers=["*"],
 )

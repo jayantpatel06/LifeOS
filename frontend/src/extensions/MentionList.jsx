@@ -52,13 +52,13 @@ export const MentionList = forwardRef((props, ref) => {
     }));
 
     return (
-        <div className="bg-popover text-popover-foreground border border-border shadow-md rounded-md overflow-hidden max-h-[300px] overflow-y-auto min-w-[200px] p-1">
+        <div className="bg-popover text-popover-foreground shadow-md rounded-md overflow-hidden max-h-[300px] overflow-y-auto min-w-[200px] p-1">
             {props.items.length ? (
                 props.items.map((item, index) => (
                     <button
                         className={`flex items-center gap-2 w-full px-2 py-1.5 text-sm rounded-sm text-left transition-colors ${index === selectedIndex ? 'bg-primary/20 text-primary font-medium' : 'hover:bg-muted/50'
                             }`}
-                        key={index}
+                        key={item.id}
                         onClick={() => selectItem(index)}
                     >
                         {item.isNew ? (
@@ -66,7 +66,12 @@ export const MentionList = forwardRef((props, ref) => {
                         ) : (
                             <FileText className="w-4 h-4 opacity-70" />
                         )}
-                        <span className="truncate">{item.isNew ? `Create sub-page: "${item.title}"` : item.title}</span>
+                        <span className="truncate">
+                            {item.isNew ? `Create sub-page: "${item.title}"` : item.title}
+                        </span>
+                        {!item.isNew && item.parentTitle && (
+                            <span className="text-xs text-muted-foreground/60 ml-auto shrink-0">in {item.parentTitle}</span>
+                        )}
                     </button>
                 ))
             ) : (
