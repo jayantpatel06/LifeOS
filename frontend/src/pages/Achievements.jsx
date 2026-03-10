@@ -70,9 +70,9 @@ export const Achievements = () => {
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         whileHover={achievement.unlocked ? { scale: 1.02 } : {}}
-        className={`relative p-4 rounded-xl border transition-all duration-300 ${achievement.unlocked
-          ? `bg-gradient-to-br from-${config.color}-500/10 to-${config.color}-950/20 border-${config.color}-500/30 hover:border-${config.color}-500/50`
-          : 'bg-card/50 border-border/30 opacity-60'
+        className={`relative p-4 rounded-2xl transition-all duration-300 ${achievement.unlocked
+          ? `bg-gradient-to-br from-${config.color}-500/10 to-${config.color}-950/20 shadow-neu-sm hover:shadow-neu`
+          : 'bg-card/50 opacity-60 shadow-neu-xs'
           }`}
         data-testid={`achievement-card-${achievement.id}`}
       >
@@ -97,7 +97,7 @@ export const Achievements = () => {
                 {achievement.name}
               </p>
               {achievement.unlocked && (
-                <Badge variant="outline" className={`bg-${config.color}-500/20 text-${config.color}-400 border-${config.color}-500/30 text-xs`}>
+                <Badge variant="outline" className={`bg-${config.color}-500/20 text-${config.color}-400 text-xs`}>
                   Unlocked
                 </Badge>
               )}
@@ -139,7 +139,7 @@ export const Achievements = () => {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
         >
-          <Card className="border-amber-500/20 bg-gradient-to-br from-card to-amber-950/20" data-testid="achievements-unlocked-card">
+          <Card className="bg-gradient-to-br from-card to-amber-950/20" data-testid="achievements-unlocked-card">
             <CardContent className="p-6">
               <div className="flex items-center gap-4">
                 <div className="flex-shrink-0">
@@ -165,7 +165,7 @@ export const Achievements = () => {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
         >
-          <Card className="border-violet-500/20 bg-gradient-to-br from-card to-violet-950/20" data-testid="xp-earned-card">
+          <Card className="bg-gradient-to-br from-card to-violet-950/20" data-testid="xp-earned-card">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
@@ -185,7 +185,7 @@ export const Achievements = () => {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
         >
-          <Card className="border-emerald-500/20 bg-gradient-to-br from-card to-emerald-950/20" data-testid="level-card">
+          <Card className="bg-gradient-to-br from-card to-emerald-950/20" data-testid="level-card">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
@@ -236,7 +236,7 @@ export const Achievements = () => {
       })}
 
       {/* Motivation Section */}
-      <Card className="border-dashed">
+      <Card className="">
         <CardContent className="p-8 text-center">
           <Target className="w-12 h-12 text-muted-foreground/50 mx-auto mb-4" />
           <h3 className="text-lg font-semibold mb-2">Keep Going!</h3>

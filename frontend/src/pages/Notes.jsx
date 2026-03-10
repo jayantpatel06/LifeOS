@@ -85,7 +85,7 @@ const EditorToolbar = ({ editor, onBack }) => {
   );
 
   return (
-    <div className="border-b border-border/50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 p-1 flex flex-wrap gap-0.5 sticky top-0 z-10 items-center">
+    <div className="bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 p-1 flex flex-wrap gap-0.5 sticky top-0 z-10 items-center shadow-neu-inset-sm rounded-b-xl">
       <Button
         variant="ghost"
         size="icon"
@@ -95,25 +95,25 @@ const EditorToolbar = ({ editor, onBack }) => {
       >
         <ArrowLeft className="w-4 h-4" />
       </Button>
-      <div className="w-px h-5 bg-border mx-1 self-center" />
+      <div className="w-px h-5 bg-muted-foreground/15 rounded-full mx-1 self-center" />
 
       <ToolbarBtn onClick={() => editor.chain().focus().toggleBold().run()} isActive={editor.isActive('bold')} icon={Bold} title="Bold" />
       <ToolbarBtn onClick={() => editor.chain().focus().toggleItalic().run()} isActive={editor.isActive('italic')} icon={Italic} title="Italic" />
       <ToolbarBtn onClick={() => editor.chain().focus().toggleStrike().run()} isActive={editor.isActive('strike')} icon={Strikethrough} title="Strikethrough" />
 
-      <div className="w-px h-5 bg-border mx-1 self-center" />
+      <div className="w-px h-5 bg-muted-foreground/15 rounded-full mx-1 self-center" />
 
       <ToolbarBtn onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()} isActive={editor.isActive('heading', { level: 1 })} icon={Heading1} title="Heading 1" />
       <ToolbarBtn onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} isActive={editor.isActive('heading', { level: 2 })} icon={Heading2} title="Heading 2" />
 
-      <div className="w-px h-5 bg-border mx-1 self-center" />
+      <div className="w-px h-5 bg-muted-foreground/15 rounded-full mx-1 self-center" />
 
       <ToolbarBtn onClick={() => editor.chain().focus().toggleBulletList().run()} isActive={editor.isActive('bulletList')} icon={List} title="Bullet List" />
       <ToolbarBtn onClick={() => editor.chain().focus().toggleOrderedList().run()} isActive={editor.isActive('orderedList')} icon={ListOrdered} title="Ordered List" />
       <ToolbarBtn onClick={() => editor.chain().focus().toggleBlockquote().run()} isActive={editor.isActive('blockquote')} icon={Quote} title="Quote" />
       <ToolbarBtn onClick={() => editor.chain().focus().toggleCodeBlock().run()} isActive={editor.isActive('codeBlock')} icon={Code} title="Code Block" />
 
-      <div className="w-px h-5 bg-border mx-1 self-center" />
+      <div className="w-px h-5 bg-muted-foreground/15 rounded-full mx-1 self-center" />
 
       <ToolbarBtn onClick={addYoutubeVideo} icon={YoutubeIcon} title="Add YouTube" />
       <ToolbarBtn onClick={addInstagramPost} icon={InstagramIcon} title="Add Instagram" />
@@ -169,16 +169,16 @@ const NoteTreeItem = ({ note, level, onSelect, selectedId, onToggleExpand, expan
     <div className="select-none">
       <div
         className={cn(
-          "group flex items-center gap-2 py-2.5 px-3 rounded-lg cursor-pointer transition-all duration-150 text-base",
+          "group flex items-center gap-2 py-2.5 px-3 rounded-2xl cursor-pointer transition-all duration-150 text-base",
           isSelected
-            ? "bg-primary/10 text-primary font-semibold shadow-sm border border-primary/20"
-            : "text-foreground/80 hover:bg-muted/60 hover:text-foreground hover:shadow-sm border border-transparent"
+            ? "bg-primary/10 text-primary font-semibold shadow-neu-sm"
+            : "text-foreground/80 hover:bg-muted/60 hover:text-foreground hover:shadow-neu-xs"
         )}
         style={{ paddingLeft: `${level * 16 + 12}px` }}
         onClick={() => onSelect(note)}
       >
         <div
-          className={cn("p-0.5 rounded-sm hover:bg-muted-foreground/20 transition-colors cursor-pointer", !hasChildren && "invisible")}
+          className={cn("p-0.5 rounded-lg hover:bg-muted-foreground/20 transition-colors cursor-pointer", !hasChildren && "invisible")}
           onClick={(e) => { e.stopPropagation(); onToggleExpand(note.id); }}
         >
           {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
@@ -193,7 +193,7 @@ const NoteTreeItem = ({ note, level, onSelect, selectedId, onToggleExpand, expan
               onKeyDown={handleKeyDown}
               onBlur={handleBlur}
               onClick={(e) => e.stopPropagation()}
-              className="bg-background border border-border rounded px-1.5 py-0.5 text-base w-full focus:outline-none focus:ring-1 focus:ring-primary"
+              className="bg-background rounded-xl shadow-neu-inset-sm px-1.5 py-0.5 text-base w-full focus:outline-none focus:ring-1 focus:ring-primary"
               placeholder="Page title"
             />
           ) : (
@@ -290,7 +290,7 @@ export const Notes = () => {
       Instagram.configure({ width: 400, height: 500 }),
       Mention.configure({
         HTMLAttributes: {
-          class: 'mention bg-primary/20 text-primary px-1.5 py-0.5 rounded-sm cursor-pointer font-medium hover:bg-primary/30 transition-colors',
+          class: 'mention bg-primary/20 text-primary px-1.5 py-0.5 rounded-lg cursor-pointer font-medium hover:bg-primary/30 transition-colors',
         },
         suggestion: createSuggestion(({ query }) => {
           const allNotes = notesRef.current || [];
@@ -314,7 +314,7 @@ export const Notes = () => {
     content: '',
     editorProps: {
       attributes: {
-        class: 'prose prose-invert max-w-none w-full focus:outline-none min-h-[500px] py-4 px-4 text-base leading-relaxed break-words whitespace-pre-wrap [&_img]:max-h-[350px] [&_img]:w-auto [&_img]:rounded-md [&_img]:shadow-sm [&_img]:cursor-zoom-in [&_img]:inline-block [&_img]:mr-2 [&_img]:mb-2 [&_img]:align-top'
+        class: 'prose prose-invert max-w-none w-full focus:outline-none min-h-[500px] py-4 px-4 text-base leading-relaxed break-words whitespace-pre-wrap [&_img]:max-h-[350px] [&_img]:w-auto [&_img]:rounded-2xl [&_img]:shadow-neu-sm [&_img]:cursor-zoom-in [&_img]:inline-block [&_img]:mr-2 [&_img]:mb-2 [&_img]:align-top'
       },
       handleClick: (view, pos, event) => {
         const link = event.target.closest('a');
@@ -597,7 +597,7 @@ export const Notes = () => {
             <motion.img
               src={lightboxSrc}
               alt="Preview"
-              className="max-w-full max-h-full rounded-lg shadow-2xl object-contain outline-none"
+              className="max-w-full max-h-full rounded-2xl shadow-neu object-contain outline-none"
               initial={{ scale: 0.9 }}
               animate={{ scale: 1 }}
               onClick={(e) => e.stopPropagation()}
@@ -607,11 +607,11 @@ export const Notes = () => {
       </AnimatePresence>
 
       {/* Main Layout */}
-      <div className="flex-1 border border-border/40 rounded-xl overflow-hidden bg-card/10 backdrop-blur-sm">
+      <div className="flex-1 rounded-2xl overflow-hidden bg-card/10 backdrop-blur-sm shadow-neu">
         {selectedNote ? (
           <div className="h-full flex flex-col bg-background">
             {/* Toolbar Area */}
-            <div className="border-b border-border/40 z-10">
+            <div className="z-10">
               <EditorToolbar editor={editor} onBack={handleBack} />
             </div>
 
@@ -631,7 +631,7 @@ export const Notes = () => {
                 </div>
 
                 {/* Footer Meta */}
-                <div className="pt-4 border-t border-border/20 text-s text-muted-foreground/60">
+                <div className="pt-4 text-s text-muted-foreground/60">
                   Last updated: {format(new Date(selectedNote.updated_at), 'MMM d, h:mm a')}
                 </div>
               </div>
@@ -640,12 +640,13 @@ export const Notes = () => {
         ) : (
           <div className="h-full flex flex-col bg-background">
             {/* Homepage Header */}
-            <div className="px-6 py-5 border-b border-border/40 flex items-center justify-between">
+            <div className="px-6 py-5 flex items-center justify-between">
               <h1 className="text-xl font-bold text-foreground tracking-tight">My Notes</h1>
               <Button variant="outline" size="sm" className="gap-1.5" onClick={() => handleCreateNote()}>
                 <Plus className="w-4 h-4" /> New Page
               </Button>
             </div>
+            <div className="mx-0 h-px bg-gradient-to-r from-transparent via-muted-foreground/15 to-transparent" />
 
             <ScrollArea className="flex-1">
               <div className="p-4 space-y-0.5">

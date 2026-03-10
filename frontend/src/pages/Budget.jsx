@@ -283,9 +283,9 @@ export const Budget = () => {
             <div key={sheet.id} className="flex items-center group">
               <button
                 onClick={() => setActiveSheetId(sheet.id)}
-                className={`px-4 py-2 text-sm font-medium rounded-lg transition-all whitespace-nowrap border ${activeSheetId === sheet.id
-                  ? 'bg-card text-foreground border-border/50 shadow-sm'
-                  : 'bg-muted/30 text-muted-foreground hover:text-foreground hover:bg-muted/50 border-transparent'
+                className={`px-4 py-2 text-sm font-medium rounded-2xl transition-all whitespace-nowrap ${activeSheetId === sheet.id
+                  ? 'bg-card text-foreground shadow-neu-sm'
+                  : 'bg-muted/30 text-muted-foreground hover:text-foreground hover:bg-muted/50'
                   }`}
               >
                 {sheet.name}
@@ -310,7 +310,7 @@ export const Budget = () => {
           ))}
           <button
             onClick={() => setNewSheetDialog(true)}
-            className="px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-lg transition-all border border-transparent"
+            className="px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-2xl transition-all"
             title="Add sheet"
           >
             <Plus className="w-4 h-4" />
@@ -333,7 +333,7 @@ export const Budget = () => {
       </div>
 
       {/* Spreadsheet Area */}
-      <div className="flex-1 border border-border/50 rounded-lg overflow-hidden flex flex-col bg-card/30">
+      <div className="flex-1 rounded-xl overflow-hidden flex flex-col bg-card/30 shadow-neu">
         {activeSheetId ? (
           <>
             {/* Table */}
@@ -358,11 +358,11 @@ export const Budget = () => {
                               <h4 className="font-semibold text-sm">Filter by Date</h4>
                               <div className="space-y-1.5">
                                 <label className="text-xs text-muted-foreground">From</label>
-                                <input type="date" className="budget-cell-input w-full border border-border/50 rounded-md px-2 py-1" value={filterStartDate} onChange={e => setFilterStartDate(e.target.value)} />
+                                <input type="date" className="budget-cell-input w-full rounded-xl shadow-neu-inset-sm px-2 py-1" value={filterStartDate} onChange={e => setFilterStartDate(e.target.value)} />
                               </div>
                               <div className="space-y-1.5">
                                 <label className="text-xs text-muted-foreground">To</label>
-                                <input type="date" className="budget-cell-input w-full border border-border/50 rounded-md px-2 py-1" value={filterEndDate} onChange={e => setFilterEndDate(e.target.value)} />
+                                <input type="date" className="budget-cell-input w-full rounded-xl shadow-neu-inset-sm px-2 py-1" value={filterEndDate} onChange={e => setFilterEndDate(e.target.value)} />
                               </div>
                               <div className="pt-2 flex justify-end">
                                 <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => { setFilterStartDate(''); setFilterEndDate(''); }}>Clear</Button>
@@ -405,7 +405,7 @@ export const Budget = () => {
 
                   {/* New Row — always on top */}
                   {newRow && (
-                    <tr className="budget-row bg-primary/5 border-b-2 border-primary/20">
+                    <tr className="budget-row bg-primary/5">
                       <td className="budget-td text-center text-muted-foreground/40 text-xs font-mono">+</td>
                       <td className="budget-td">
                         <input type="date" value={newRow.date} onChange={e => setNewRow({ ...newRow, date: e.target.value })}
@@ -500,7 +500,7 @@ export const Budget = () => {
             </div>
 
             {/* Totals Footer Bar */}
-            <div className="bg-muted/40 px-4 py-2.5 border-t-2 border-border/50 flex items-center justify-start gap-8">
+            <div className="bg-muted/40 px-4 py-2.5 rounded-b-xl flex items-center justify-start gap-8">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Total:</span>
                 <span className="font-mono font-bold text-sm text-blue-500">{formatNum(totalCredit - totalDebit)}</span>

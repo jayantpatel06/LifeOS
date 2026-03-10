@@ -42,16 +42,16 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 
 const COLORS = [
-  { id: 'default', bg: 'bg-gradient-to-br from-card to-card border-border/50', border: 'border-border/50 shadow-sm', label: 'Default' },
-  { id: 'red', bg: 'bg-gradient-to-br from-red-500/10 to-rose-500/5', border: 'border-red-500/20 shadow-sm shadow-red-500/5', label: 'Red' },
-  { id: 'orange', bg: 'bg-gradient-to-br from-orange-500/10 to-amber-500/5', border: 'border-orange-500/20 shadow-sm shadow-orange-500/5', label: 'Orange' },
-  { id: 'amber', bg: 'bg-gradient-to-br from-amber-500/10 to-yellow-500/5', border: 'border-amber-500/20 shadow-sm shadow-amber-500/5', label: 'Amber' },
-  { id: 'green', bg: 'bg-gradient-to-br from-emerald-500/10 to-green-500/5', border: 'border-emerald-500/20 shadow-sm shadow-emerald-500/5', label: 'Green' },
-  { id: 'teal', bg: 'bg-gradient-to-br from-teal-500/10 to-cyan-500/5', border: 'border-teal-500/20 shadow-sm shadow-teal-500/5', label: 'Teal' },
-  { id: 'blue', bg: 'bg-gradient-to-br from-blue-500/10 to-indigo-500/5', border: 'border-blue-500/20 shadow-sm shadow-blue-500/5', label: 'Blue' },
-  { id: 'indigo', bg: 'bg-gradient-to-br from-indigo-500/10 to-violet-500/5', border: 'border-indigo-500/20 shadow-sm shadow-indigo-500/5', label: 'Indigo' },
-  { id: 'purple', bg: 'bg-gradient-to-br from-violet-500/10 to-purple-500/5', border: 'border-violet-500/20 shadow-sm shadow-violet-500/5', label: 'Purple' },
-  { id: 'pink', bg: 'bg-gradient-to-br from-pink-500/10 to-rose-500/5', border: 'border-pink-500/20 shadow-sm shadow-pink-500/5', label: 'Pink' },
+  { id: 'default', bg: 'bg-gradient-to-br from-card to-card', border: 'shadow-neu-sm', label: 'Default' },
+  { id: 'red', bg: 'bg-gradient-to-br from-red-500/10 to-rose-500/5', border: 'shadow-neu-sm', label: 'Red' },
+  { id: 'orange', bg: 'bg-gradient-to-br from-orange-500/10 to-amber-500/5', border: 'shadow-neu-sm', label: 'Orange' },
+  { id: 'amber', bg: 'bg-gradient-to-br from-amber-500/10 to-yellow-500/5', border: 'shadow-neu-sm', label: 'Amber' },
+  { id: 'green', bg: 'bg-gradient-to-br from-emerald-500/10 to-green-500/5', border: 'shadow-neu-sm', label: 'Green' },
+  { id: 'teal', bg: 'bg-gradient-to-br from-teal-500/10 to-cyan-500/5', border: 'shadow-neu-sm', label: 'Teal' },
+  { id: 'blue', bg: 'bg-gradient-to-br from-blue-500/10 to-indigo-500/5', border: 'shadow-neu-sm', label: 'Blue' },
+  { id: 'indigo', bg: 'bg-gradient-to-br from-indigo-500/10 to-violet-500/5', border: 'shadow-neu-sm', label: 'Indigo' },
+  { id: 'purple', bg: 'bg-gradient-to-br from-violet-500/10 to-purple-500/5', border: 'shadow-neu-sm', label: 'Purple' },
+  { id: 'pink', bg: 'bg-gradient-to-br from-pink-500/10 to-rose-500/5', border: 'shadow-neu-sm', label: 'Pink' },
 ];
 
 // Sortable Checklist Item Component
@@ -101,7 +101,7 @@ const TaskCard = ({ task, onClick, onColorUpdate, onDelete, onEdit, onReset, onT
     <div className="mb-6 break-inside-avoid">
       <div
         className={cn(
-          "group relative rounded-xl border transition-all duration-200 overflow-hidden hover:shadow-md flex flex-col",
+          "group relative rounded-2xl transition-all duration-200 overflow-hidden hover:shadow-neu flex flex-col",
           colorConfig.bg,
           colorConfig.border
         )}
@@ -123,7 +123,7 @@ const TaskCard = ({ task, onClick, onColorUpdate, onDelete, onEdit, onReset, onT
                   <button
                     key={c.id}
                     onClick={() => onColorUpdate(task, c.id)}
-                    className={cn("w-5 h-5 rounded-full border border-border/50", c.bg)}
+                    className={cn("w-5 h-5 rounded-full", c.bg)}
                     title={c.label}
                   />
                 ))}
@@ -152,8 +152,8 @@ const TaskCard = ({ task, onClick, onColorUpdate, onDelete, onEdit, onReset, onT
             {task.priority === 2 && <span className="inline-flex items-center gap-1 text-[10px] uppercase font-bold tracking-wider text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded-full"><Flag className="w-3 h-3" /> Medium Priority</span>}
             {task.priority === 1 && <span className="inline-flex items-center gap-1 text-[10px] uppercase font-bold tracking-wider text-blue-500 bg-blue-500/10 px-2 py-0.5 rounded-full"><Flag className="w-3 h-3" /> Low Priority</span>}
             {task.due_date && (
-              <span className={cn("inline-flex items-center gap-1 text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full border",
-                task.due_date < new Date().toISOString().split('T')[0] ? "text-destructive border-destructive/30 bg-destructive/10" : "text-primary border-primary/30 bg-primary/10"
+              <span className={cn("inline-flex items-center gap-1 text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full",
+                task.due_date < new Date().toISOString().split('T')[0] ? "text-destructive bg-destructive/10" : "text-primary bg-primary/10"
               )}>
                 <Calendar className="w-3 h-3" />
                 {task.due_date < new Date().toISOString().split('T')[0] ? 'Overdue: ' : 'Due: '}
@@ -182,13 +182,13 @@ const TaskCard = ({ task, onClick, onColorUpdate, onDelete, onEdit, onReset, onT
           </div>
 
           {completedItems.length > 0 && (
-            <div className="mt-4 pt-2 border-t border-border/10">
+            <div className="mt-4 pt-2">
               <Collapsible>
                 <CollapsibleTrigger className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors w-full">
                   <ChevronDown className="w-4 h-4" />
                   {completedItems.length} Completed
                 </CollapsibleTrigger>
-                <CollapsibleContent className="space-y-1 mt-2 pl-2 border-l-2 border-border/30 ml-1.5">
+                <CollapsibleContent className="space-y-1 mt-2 pl-2 ml-1.5">
                   {completedItems.map((item, idx) => (
                     <div key={idx} className="flex items-start gap-2 text-muted-foreground/60">
                       <CheckCircle2 className="w-3 h-3 mt-1.5 shrink-0" />
@@ -439,7 +439,7 @@ export const Tasks = () => {
     <div className="space-y-6 w-full p-4" data-testid="tasks-page">
       {/* Quick Add Input */}
       <div className="max-w-xl mx-auto w-full relative z-20">
-        <div className={cn(quickAddColorClass, "border border-border rounded-xl shadow-sm transition-all duration-200 overflow-hidden", isQuickAddExpanded ? "shadow-lg ring-1 ring-primary/20" : "hover:shadow-md")}>
+        <div className={cn(quickAddColorClass, "rounded-2xl shadow-neu-sm transition-all duration-200 overflow-hidden", isQuickAddExpanded ? "shadow-neu ring-2 ring-primary/20" : "hover:shadow-neu")}>
           {!isQuickAddExpanded ? (
             <div
               className="p-3 px-4 flex items-center gap-3 cursor-text text-muted-foreground font-medium"
@@ -454,7 +454,7 @@ export const Tasks = () => {
                 value={quickTitle}
                 onChange={(e) => setQuickTitle(e.target.value)}
                 placeholder="Title"
-                className="border-none shadow-none text-xl font-semibold px-0 focus-visible:ring-0 h-auto py-0 bg-transparent placeholder:text-muted-foreground/50"
+                className="border-none !shadow-none text-xl font-semibold px-0 focus-visible:ring-0 focus-visible:!shadow-none h-auto py-0 bg-transparent placeholder:text-muted-foreground/50"
                 autoFocus
                 onKeyDown={(e) => handleKeyDown(e, -1)}
               />
@@ -468,7 +468,7 @@ export const Tasks = () => {
                       onChange={(e) => handleChecklistItemChange(idx, e.target.value)}
                       onKeyDown={(e) => handleKeyDown(e, idx)}
                       placeholder="List item"
-                      className="border-none shadow-none p-0 h-auto focus-visible:ring-0 bg-transparent text-base"
+                      className="border-none !shadow-none p-0 h-auto focus-visible:ring-0 focus-visible:!shadow-none bg-transparent text-base"
                       autoFocus={idx === checklistItems.length - 1 && item.text === '' && checklistItems.length > 1}
                     />
                     <button type="button" onClick={() => { const newItems = [...checklistItems]; newItems.splice(idx, 1); setChecklistItems(newItems); }} className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity"><X className="w-4 h-4" /></button>
@@ -479,26 +479,26 @@ export const Tasks = () => {
                 </div>
               </div>
 
-              <div className="flex items-center justify-between pt-3 border-t border-border/40 flex-wrap gap-2">
+              <div className="flex items-center justify-between pt-3 flex-wrap gap-2">
                 <div className="flex gap-2 flex-wrap">
                   <Popover>
                     <PopoverTrigger asChild><Button type="button" variant="ghost" size="icon" className="h-8 w-8 rounded-full"><Palette className="w-4 h-4 text-muted-foreground" /></Button></PopoverTrigger>
                     <PopoverContent className="w-auto p-2" align="start">
                       <div className="flex gap-1">
                         {COLORS.map(c => (
-                          <button key={c.id} type="button" onClick={() => setQuickColor(c.id)} className={cn("w-5 h-5 rounded-full border border-border/50", c.bg, quickColor === c.id && "ring-2 ring-primary")} />
+                          <button key={c.id} type="button" onClick={() => setQuickColor(c.id)} className={cn("w-5 h-5 rounded-full", c.bg, quickColor === c.id && "ring-2 ring-primary")} />
                         ))}
                       </div>
                     </PopoverContent>
                   </Popover>
 
-                  <div className="flex items-center gap-1 border border-border/50 rounded-md bg-background/50 px-2 py-1">
+                  <div className="flex items-center gap-1 rounded-xl bg-background/50 px-2 py-1 shadow-neu-inset-sm">
                     <Calendar className="w-3 h-3 text-muted-foreground" />
                     <input type="date" value={quickDueDate} onChange={e => setQuickDueDate(e.target.value)} className="bg-transparent border-none text-xs text-muted-foreground focus:outline-none w-28 h-5" />
                   </div>
 
                   <Select value={quickPriority} onValueChange={setQuickPriority}>
-                    <SelectTrigger className="h-7 border-border/50 bg-background/50 text-xs w-24">
+                    <SelectTrigger className="h-7 bg-background/50 text-xs w-24 shadow-neu-inset-sm">
                       <SelectValue placeholder="Priority" />
                     </SelectTrigger>
                     <SelectContent>
@@ -608,7 +608,7 @@ export const Tasks = () => {
             <div className="flex gap-4">
               <div className="flex-1 space-y-1.5">
                 <Label className="text-xs text-muted-foreground">Due Date</Label>
-                <div className="flex items-center gap-2 border border-border rounded-md px-3 py-2 bg-background">
+                <div className="flex items-center gap-2 rounded-xl px-3 py-2 bg-background shadow-neu-inset-sm">
                   <Calendar className="w-4 h-4 text-muted-foreground" />
                   <input type="date" value={editDueDate} onChange={e => setEditDueDate(e.target.value)} className="bg-transparent border-none text-sm focus:outline-none w-full" />
                 </div>

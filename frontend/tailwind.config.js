@@ -8,9 +8,20 @@ module.exports = {
   theme: {
   	extend: {
   		borderRadius: {
-  			lg: 'var(--radius)',
-  			md: 'calc(var(--radius) - 2px)',
-  			sm: 'calc(var(--radius) - 4px)'
+  			lg: '1rem',
+  			md: '0.75rem',
+  			sm: '0.5rem',
+  			xl: '1.25rem',
+  			'2xl': '1.5rem',
+  			'3xl': '2rem',
+  		},
+  		boxShadow: {
+  			'neu': '6px 6px 12px hsl(240 10% 2.5%), -6px -6px 12px hsl(240 10% 8%)',
+  			'neu-sm': '3px 3px 6px hsl(240 10% 2.5%), -3px -3px 6px hsl(240 10% 8%)',
+  			'neu-xs': '2px 2px 4px hsl(240 10% 2.5%), -2px -2px 4px hsl(240 10% 8%)',
+  			'neu-inset': 'inset 2px 2px 5px hsl(240 10% 2.5%), inset -2px -2px 5px hsl(240 10% 8%)',
+  			'neu-inset-sm': 'inset 1px 1px 3px hsl(240 10% 2.5%), inset -1px -1px 3px hsl(240 10% 8%)',
+  			'neu-flat': '0 1px 3px hsl(240 10% 2.5%), 0 -1px 2px hsl(240 10% 8%)',
   		},
   		colors: {
   			background: 'hsl(var(--background))',

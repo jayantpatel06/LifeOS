@@ -221,7 +221,7 @@ export const FocusTimer = () => {
       <div className="flex flex-col lg:flex-row gap-4 items-start">
         {/* Timer */}
         <div className="w-full lg:flex-1">
-          <Card className={`w-full border-${config.color}-500/20 bg-gradient-to-br from-card to-${config.color}-950/10`} data-testid="timer-card">
+          <Card className={`w-full bg-gradient-to-br from-card to-${config.color}-950/10`} data-testid="timer-card">
             <CardContent className="p-10">
               {/* Mode Selector */}
               <div className="flex justify-center gap-2 mb-6">
@@ -250,7 +250,7 @@ export const FocusTimer = () => {
 
               {/* Session reset confirmation prompt */}
               {resetConfirmMode && (
-                <div className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 flex flex-col gap-2">
+                <div className="mb-4 rounded-2xl bg-amber-500/10 px-4 py-3 flex flex-col gap-2 shadow-neu-sm">
                   <p className="text-sm font-medium text-amber-400">You have an active focus session. Reset it to switch mode?</p>
                   <div className="flex gap-2">
                     <Button size="sm" variant="destructive" onClick={confirmModeSwitch}>Reset &amp; Switch</Button>
@@ -318,7 +318,7 @@ export const FocusTimer = () => {
                       </div>
                     )}
                   </motion.div>
-                  <Badge variant="outline" className={`mt-2 bg-${config.color}-500/20 text-${config.color}-400 border-${config.color}-500/30`}>
+                  <Badge variant="outline" className={`mt-2 bg-${config.color}-500/20 text-${config.color}-400`}>
                     <Icon className="w-3 h-3 mr-1" />
                     {config.label}
                   </Badge>
@@ -346,7 +346,7 @@ export const FocusTimer = () => {
                   <Button
                     size="lg"
                     onClick={startTimer}
-                    className={`gap-2 shadow-lg ${mode === 'focus'
+                    className={`gap-2 shadow-neu ${mode === 'focus'
                       ? 'bg-gradient-to-r from-violet-600 to-violet-700 hover:from-violet-700 hover:to-violet-800'
                       : mode === 'short_break'
                         ? 'bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800'
@@ -473,7 +473,7 @@ export const FocusTimer = () => {
       </div>
 
       {/* Pomodoro Technique Info */}
-      <Card className="border-dashed">
+      <Card className="">
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
             <Brain className="w-5 h-5 text-violet-500" />

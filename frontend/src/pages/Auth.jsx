@@ -97,7 +97,7 @@ export const Auth = () => {
           transition={{ duration: 0.6 }}
         >
           <div className="flex items-center gap-4 mb-8">
-            <div className="w-14 h-14 rounded-2xl flex items-center justify-center shadow-xl overflow-hidden">
+            <div className="w-14 h-14 rounded-2xl flex items-center justify-center shadow-neu overflow-hidden">
               <img src="/logo192-v2.png" alt="LifeOS Logo" className="w-full h-full object-cover" />
             </div>
             <h1 className="text-4xl font-bold font-['Outfit'] tracking-tight">LifeOS</h1>
@@ -122,7 +122,7 @@ export const Auth = () => {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.1 * index, duration: 0.4 }}
-                className="flex items-center gap-3 p-4 rounded-xl bg-card/50 border border-border/50"
+                className="flex items-center gap-3 p-4 rounded-2xl bg-card/50 shadow-neu-sm"
               >
                 <feature.icon className={`w-5 h-5 ${feature.color}`} />
                 <span className="text-sm font-medium">{feature.label}</span>
@@ -148,7 +148,7 @@ export const Auth = () => {
             <span className="text-xl font-bold font-['Outfit']">LifeOS</span>
           </div>
 
-          <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
+          <Card className="bg-card/80 backdrop-blur-sm">
             <CardHeader className="text-center">
               <CardTitle className="text-2xl font-['Outfit']">Get Started</CardTitle>
               <CardDescription>Sign in or create an account to continue</CardDescription>

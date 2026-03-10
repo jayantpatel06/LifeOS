@@ -172,16 +172,16 @@ export const Settings = () => {
                       {month.days.map((day, dIdx) => (
                         <div key={dIdx} className="w-2.5 h-2.5 flex items-center justify-center">
                           {day.type === 'empty' ? (
-                            <div className="w-2 h-2 rounded-sm bg-muted/10 opacity-30" />
+                            <div className="w-2 h-2 rounded-lg bg-muted/10 opacity-30" />
                           ) : (
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <div
-                                  className={`w-2.5 h-2.5 rounded-sm contribution-cell level-${day.level} hover:opacity-80 transition-all cursor-pointer shadow-sm`}
+                                  className={`w-2.5 h-2.5 rounded-lg contribution-cell level-${day.level} hover:opacity-80 transition-all cursor-pointer shadow-neu-xs`}
                                   data-testid={`contribution-cell-${day.date}`}
                                 />
                               </TooltipTrigger>
-                              <TooltipContent side="top" className="bg-popover/95 backdrop-blur-md border-border shadow-2xl">
+                              <TooltipContent side="top" className="bg-popover/95 backdrop-blur-md">
                                 <div className="space-y-1">
                                   <p className="font-bold text-[10px]">{day.count} contributions</p>
                                   <p className="text-[10px] text-muted-foreground">
@@ -209,7 +209,7 @@ export const Settings = () => {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Streak Card */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="h-full">
-          <Card className="h-full border-orange-500/40 bg-gradient-to-br from-card to-orange-950/20 shadow-lg shadow-orange-900/10" data-testid="streak-card">
+          <Card className="h-full bg-gradient-to-br from-card to-orange-950/20 shadow-neu" data-testid="streak-card">
             <CardContent className="p-6 h-full flex flex-col justify-between">
               <div className="flex items-center justify-between">
                 <div>
@@ -226,7 +226,7 @@ export const Settings = () => {
 
         {/* XP Card */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="h-full">
-          <Card className="h-full border-violet-500/40 bg-gradient-to-br from-card to-violet-950/20 shadow-lg shadow-violet-900/10" data-testid="xp-card">
+          <Card className="h-full bg-gradient-to-br from-card to-violet-950/20 shadow-neu" data-testid="xp-card">
             <CardContent className="p-6 h-full flex flex-col justify-between">
               <div className="flex items-center justify-between">
                 <div>
@@ -245,7 +245,7 @@ export const Settings = () => {
 
         {/* Tasks Today */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="h-full">
-          <Card className="h-full border-emerald-500/20 bg-gradient-to-br from-card to-emerald-950/20" data-testid="tasks-today-card">
+          <Card className="h-full bg-gradient-to-br from-card to-emerald-950/20" data-testid="tasks-today-card">
             <CardContent className="p-6 h-full flex flex-col justify-between">
               <div className="flex items-center justify-between">
                 <div>
@@ -264,7 +264,7 @@ export const Settings = () => {
 
         {/* Focus Time */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="h-full">
-          <Card className="h-full border-blue-500/20 bg-gradient-to-br from-card to-blue-950/20" data-testid="focus-time-card">
+          <Card className="h-full bg-gradient-to-br from-card to-blue-950/20" data-testid="focus-time-card">
             <CardContent className="p-6 h-full flex flex-col justify-between">
               <div className="flex items-center justify-between">
                 <div>

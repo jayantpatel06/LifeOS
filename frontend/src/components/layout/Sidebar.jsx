@@ -50,10 +50,10 @@ export const Sidebar = ({ isCollapsed, toggleCollapse }) => {
         onClick={() => setMobileOpen(false)}
         className={({ isActive }) =>
           cn(
-            "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200",
+            "flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium transition-all duration-200",
             isActive
-              ? "bg-primary/10 text-primary border border-primary/20 shadow-lg glow-primary"
-              : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
+              ? "bg-primary/10 text-primary shadow-neu-sm glow-primary"
+              : "text-muted-foreground hover:text-foreground hover:bg-muted/30",
             isCollapsed && !mobileOpen ? "justify-center" : ""
           )
         }
@@ -104,7 +104,7 @@ export const Sidebar = ({ isCollapsed, toggleCollapse }) => {
       {/* User Stats */}
       <div className={cn("px-4 mb-4 transition-all duration-300", (isCollapsed && !mobileOpen) ? "px-2" : "px-4")}>
         <div className={cn(
-          "p-4 rounded-xl bg-gradient-to-br from-card to-muted/50 border border-border/50 transition-all duration-100 overflow-hidden",
+          "p-4 rounded-2xl bg-gradient-to-br from-card to-muted/50 shadow-neu-sm transition-all duration-100 overflow-hidden",
           (isCollapsed && !mobileOpen) ? "p-2 items-center flex flex-col" : ""
         )}>
           <div className={cn("flex items-center gap-3 mb-3 w-full", (isCollapsed && !mobileOpen) ? "flex-col mb-0" : "")}>
@@ -174,8 +174,8 @@ export const Sidebar = ({ isCollapsed, toggleCollapse }) => {
       {/* Sidebar */}
       <aside
         className={cn(
-          "fixed md:sticky top-0 left-0 z-40 h-screen transition-all duration-300 ease-in-out bg-background border-r border-border/50 flex flex-col",
-          (isCollapsed && !mobileOpen) ? "w-16" : "w-52",
+          "fixed md:sticky top-0 left-0 z-40 h-screen transition-all duration-300 ease-in-out bg-background flex flex-col",
+          (isCollapsed && !mobileOpen) ? "w-17" : "w-52",
           mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
         )}
       >
