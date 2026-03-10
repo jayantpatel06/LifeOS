@@ -114,8 +114,10 @@ class TaskResponse(BaseModel):
     description: str
     priority: int
     status: str
-    estimated_time: Optional[int]
-    due_date: Optional[str]
+    category: Optional[str] = None
+    estimated_time: Optional[int] = None
+    actual_time: Optional[int] = None
+    due_date: Optional[str] = None
     completed_at: Optional[str]
     tags: List[str]
     checklist: List[ChecklistItem] = []
