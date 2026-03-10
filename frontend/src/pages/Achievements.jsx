@@ -34,18 +34,20 @@ export const Achievements = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const controller = new AbortController();
     const fetchAchievements = async () => {
       try {
-        const response = await api.get('/achievements');
+        const response = await api.get('/achievements', { signal: controller.signal });
         setAchievements(response.data);
       } catch (error) {
-        console.error('Failed to fetch achievements:', error);
+        if (!controller.signal.aborted) console.error('Failed to fetch achievements:', error);
       } finally {
         setLoading(false);
       }
     };
 
     fetchAchievements();
+    return () => controller.abort();
   }, [api]);
 
   const unlockedCount = achievements.filter(a => a.unlocked).length;

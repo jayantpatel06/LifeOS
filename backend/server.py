@@ -1,9 +1,12 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, UploadFile, File
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, UploadFile, File, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from motor.motor_asyncio import AsyncIOMotorClient
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 import os
 import logging
 from pathlib import Path
@@ -36,6 +39,9 @@ JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_HOURS = 24
 
 app = FastAPI()
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 api_router = APIRouter(prefix="/api")
 security = HTTPBearer()
 
@@ -355,7 +361,8 @@ ALLOWED_IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.
 MAX_UPLOAD_SIZE = 5 * 1024 * 1024  # 5MB
 
 @api_router.post("/upload", response_model=UploadResponse)
-async def upload_file(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
+@limiter.limit("20/minute")
+async def upload_file(request: Request, file: UploadFile = File(...), user: dict = Depends(get_current_user)):
     """Upload an image file and return its URL."""
     try:
         # Validate file extension
@@ -392,7 +399,8 @@ async def upload_file(file: UploadFile = File(...), user: dict = Depends(get_cur
 # ============ AUTH ROUTES ============
 
 @api_router.post("/auth/register", response_model=TokenResponse)
-async def register(data: UserCreate):
+@limiter.limit("5/minute")
+async def register(request: Request, data: UserCreate):
     email = data.email.lower()
     existing = await db.users.find_one({"email": email}, {"_id": 0})
     if existing:
@@ -436,7 +444,8 @@ async def register(data: UserCreate):
     return TokenResponse(access_token=token, user=user_response)
 
 @api_router.post("/auth/login", response_model=TokenResponse)
-async def login(data: UserLogin):
+@limiter.limit("10/minute")
+async def login(request: Request, data: UserLogin):
     email = data.email.lower()
     user = await db.users.find_one({"email": email}, {"_id": 0})
     if not user or not verify_password(data.password, user["password_hash"]):
@@ -470,7 +479,8 @@ async def get_me(user: dict = Depends(get_current_user)):
     )
 
 @api_router.post("/auth/refresh", response_model=TokenResponse)
-async def refresh_token(user: dict = Depends(get_current_user)):
+@limiter.limit("10/minute")
+async def refresh_token(request: Request, user: dict = Depends(get_current_user)):
     """Issue a new token for an authenticated user (before current token expires)."""
     token = create_token(user["id"], user["email"])
     user_response = UserResponse(
@@ -1230,6 +1240,21 @@ async def startup_db_client():
     try:
         await client.admin.command("ping")
         logger.info(f"✅ Successfully connected to MongoDB database: '{os.environ['DB_NAME']}'")
+        
+        # Create indexes for performance
+        await db.users.create_index("id", unique=True)
+        await db.users.create_index("email", unique=True)
+        await db.tasks.create_index([("user_id", 1), ("status", 1)])
+        await db.tasks.create_index("user_id")
+        await db.notes.create_index("user_id")
+        await db.notes.create_index([("user_id", 1), ("parent_id", 1)])
+        await db.budget_sheets.create_index("user_id")
+        await db.budget_rows.create_index([("sheet_id", 1), ("user_id", 1)])
+        await db.focus_sessions.create_index([("user_id", 1), ("completed_at", -1)])
+        await db.habits.create_index([("user_id", 1), ("position", 1)])
+        await db.daily_activity.create_index([("user_id", 1), ("date", -1)], unique=True)
+        await db.user_achievements.create_index([("user_id", 1), ("achievement_id", 1)], unique=True)
+        logger.info("✅ Database indexes ensured")
     except Exception as e:
         logger.error(f"❌ Failed to connect to MongoDB: {e}")
 

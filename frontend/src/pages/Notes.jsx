@@ -393,18 +393,22 @@ export const Notes = () => {
     };
   }, [editor]);
 
-  const fetchNotes = useCallback(async () => {
+  const fetchNotes = useCallback(async (signal) => {
     try {
-      const response = await api.get('/notes');
+      const response = await api.get('/notes', { signal });
       setNotes(response.data);
     } catch (error) {
-      toast.error('Failed to fetch notes');
+      if (!signal?.aborted) toast.error('Failed to fetch notes');
     } finally {
       setLoading(false);
     }
   }, [api]);
 
-  useEffect(() => { fetchNotes(); }, [fetchNotes]);
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchNotes(controller.signal);
+    return () => controller.abort();
+  }, [fetchNotes]);
 
   // Tree Building Logic
   const noteTree = useMemo(() => {

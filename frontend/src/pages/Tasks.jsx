@@ -234,9 +234,9 @@ export const Tasks = () => {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
-  const fetchTasks = useCallback(async () => {
+  const fetchTasks = useCallback(async (signal) => {
     try {
-      const response = await api.get('/tasks');
+      const response = await api.get('/tasks', { signal });
       // Keep position sorting for stability, but we removed drag
       const tasksWithPos = response.data.map((t, i) => ({ ...t, position: t.position ?? i }));
       setTasks(tasksWithPos.sort((a, b) => {
@@ -253,14 +253,16 @@ export const Tasks = () => {
         return a.position - b.position;
       }));
     } catch (error) {
-      toast.error('Failed to fetch tasks');
+      if (!signal?.aborted) toast.error('Failed to fetch tasks');
     } finally {
       setLoading(false);
     }
   }, [api]);
 
   useEffect(() => {
-    fetchTasks();
+    const controller = new AbortController();
+    fetchTasks(controller.signal);
+    return () => controller.abort();
   }, [fetchTasks]);
 
   // --- Handlers for Quick Add & Basic Ops ---

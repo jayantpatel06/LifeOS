@@ -9,6 +9,18 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs'
 import { toast } from 'sonner';
 import { Zap, CheckSquare, FileText, Wallet, Timer, Flame } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { z } from 'zod';
+
+const loginSchema = z.object({
+  email: z.string().email('Please enter a valid email'),
+  password: z.string().min(1, 'Password is required'),
+});
+
+const registerSchema = z.object({
+  email: z.string().email('Please enter a valid email'),
+  password: z.string().min(6, 'Password must be at least 6 characters'),
+  username: z.string().min(2, 'Username must be at least 2 characters').max(30, 'Username must be 30 characters or less'),
+});
 
 export const Auth = () => {
   const [loginEmail, setLoginEmail] = useState('');
@@ -17,12 +29,21 @@ export const Auth = () => {
   const [registerPassword, setRegisterPassword] = useState('');
   const [registerUsername, setRegisterUsername] = useState('');
   const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState({});
 
   const { login, register } = useAuth();
   const navigate = useNavigate();
 
   const handleLogin = async (e) => {
     e.preventDefault();
+    setErrors({});
+    const result = loginSchema.safeParse({ email: loginEmail, password: loginPassword });
+    if (!result.success) {
+      const fieldErrors = result.error.flatten().fieldErrors;
+      setErrors(fieldErrors);
+      toast.error(Object.values(fieldErrors).flat()[0]);
+      return;
+    }
     setLoading(true);
     try {
       await login(loginEmail, loginPassword);
@@ -37,6 +58,14 @@ export const Auth = () => {
 
   const handleRegister = async (e) => {
     e.preventDefault();
+    setErrors({});
+    const result = registerSchema.safeParse({ email: registerEmail, password: registerPassword, username: registerUsername });
+    if (!result.success) {
+      const fieldErrors = result.error.flatten().fieldErrors;
+      setErrors(fieldErrors);
+      toast.error(Object.values(fieldErrors).flat()[0]);
+      return;
+    }
     setLoading(true);
     try {
       await register(registerEmail, registerPassword, registerUsername);
@@ -144,6 +173,7 @@ export const Auth = () => {
                         required
                         data-testid="login-email-input"
                       />
+                      {errors.email && <p className="text-xs text-destructive">{errors.email[0]}</p>}
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="login-password">Password</Label>
@@ -156,6 +186,7 @@ export const Auth = () => {
                         required
                         data-testid="login-password-input"
                       />
+                      {errors.password && <p className="text-xs text-destructive">{errors.password[0]}</p>}
                     </div>
                     <div className="space-y-14"> </div>
                     <Button
@@ -182,6 +213,7 @@ export const Auth = () => {
                         required
                         data-testid="register-username-input"
                       />
+                      {errors.username && <p className="text-xs text-destructive">{errors.username[0]}</p>}
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="register-email">Email</Label>
@@ -194,6 +226,7 @@ export const Auth = () => {
                         required
                         data-testid="register-email-input"
                       />
+                      {errors.email && <p className="text-xs text-destructive">{errors.email[0]}</p>}
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="register-password">Password</Label>
@@ -206,6 +239,7 @@ export const Auth = () => {
                         required
                         data-testid="register-password-input"
                       />
+                      {errors.password && <p className="text-xs text-destructive">{errors.password[0]}</p>}
                     </div>
                     
                     <Button

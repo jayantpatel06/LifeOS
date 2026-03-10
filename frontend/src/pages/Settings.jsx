@@ -23,22 +23,24 @@ export const Settings = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const controller = new AbortController();
     const fetchData = async () => {
       try {
         const [statsRes, activityRes] = await Promise.all([
-          api.get('/dashboard/stats'),
-          api.get('/dashboard/activity?days=365'),
+          api.get('/dashboard/stats', { signal: controller.signal }),
+          api.get('/dashboard/activity?days=365', { signal: controller.signal }),
         ]);
         setStats(statsRes.data);
         setActivityData(activityRes.data);
         refreshUser();
       } catch (error) {
-        console.error('Failed to fetch settings data:', error);
+        if (!controller.signal.aborted) console.error('Failed to fetch settings data:', error);
       } finally {
         setLoading(false);
       }
     };
     fetchData();
+    return () => controller.abort();
   }, [api, refreshUser]);
 
   const handleLogout = () => {

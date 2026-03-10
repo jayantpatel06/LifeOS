@@ -33,33 +33,41 @@ export const Budget = () => {
   const csvInputRef = useRef(null);
 
   // Fetch sheets
-  const fetchSheets = useCallback(async () => {
+  const fetchSheets = useCallback(async (signal) => {
     try {
-      const res = await api.get('/budget/sheets');
+      const res = await api.get('/budget/sheets', { signal });
       setSheets(res.data);
       if (res.data.length > 0 && !activeSheetId) {
         setActiveSheetId(res.data[0].id);
       }
     } catch (error) {
-      toast.error('Failed to load sheets');
+      if (!signal?.aborted) toast.error('Failed to load sheets');
     } finally {
       setLoading(false);
     }
   }, [api, activeSheetId]);
 
   // Fetch rows for active sheet
-  const fetchRows = useCallback(async () => {
+  const fetchRows = useCallback(async (signal) => {
     if (!activeSheetId) { setRows([]); return; }
     try {
-      const res = await api.get(`/budget/sheets/${activeSheetId}/rows`);
+      const res = await api.get(`/budget/sheets/${activeSheetId}/rows`, { signal });
       setRows(res.data);
     } catch (error) {
-      toast.error('Failed to load rows');
+      if (!signal?.aborted) toast.error('Failed to load rows');
     }
   }, [api, activeSheetId]);
 
-  useEffect(() => { fetchSheets(); }, [fetchSheets]);
-  useEffect(() => { fetchRows(); }, [activeSheetId, fetchRows]);
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchSheets(controller.signal);
+    return () => controller.abort();
+  }, [fetchSheets]);
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchRows(controller.signal);
+    return () => controller.abort();
+  }, [activeSheetId, fetchRows]);
 
   // --- Sheet actions ---
   const createSheet = async () => {
@@ -119,7 +127,7 @@ export const Budget = () => {
         credit: parseFloat(newRow.credit) || 0,
         debit: parseFloat(newRow.debit) || 0,
       });
-      setRows(prev => [...prev, res.data]);
+      setRows(prev => [res.data, ...prev]);
       setNewRow(null);
     } catch (error) {
       toast.error('Failed to add row');
@@ -231,16 +239,17 @@ export const Budget = () => {
       result = result.filter(r => r.date <= filterEndDate);
     }
 
-    // 2. Sort
+    // 2. Sort (default: date descending — newest first)
+    const effectiveField = sortField || 'date';
+    const effectiveDir = sortField ? sortDir : 'desc';
     result.sort((a, b) => {
-      if (!sortField) return 0;
       let cmp = 0;
-      if (sortField === 'date' || sortField === 'description') {
-        cmp = (a[sortField] || '').localeCompare(b[sortField] || '');
+      if (effectiveField === 'date' || effectiveField === 'description') {
+        cmp = (a[effectiveField] || '').localeCompare(b[effectiveField] || '');
       } else {
-        cmp = (a[sortField] || 0) - (b[sortField] || 0);
+        cmp = (a[effectiveField] || 0) - (b[effectiveField] || 0);
       }
-      return sortDir === 'asc' ? cmp : -cmp;
+      return effectiveDir === 'asc' ? cmp : -cmp;
     });
 
     return result;
@@ -393,6 +402,40 @@ export const Budget = () => {
                       </td>
                     </tr>
                   )}
+
+                  {/* New Row — always on top */}
+                  {newRow && (
+                    <tr className="budget-row bg-primary/5 border-b-2 border-primary/20">
+                      <td className="budget-td text-center text-muted-foreground/40 text-xs font-mono">+</td>
+                      <td className="budget-td">
+                        <input type="date" value={newRow.date} onChange={e => setNewRow({ ...newRow, date: e.target.value })}
+                          className="budget-cell-input" autoFocus onKeyDown={handleNewRowKeyDown} />
+                      </td>
+                      <td className="budget-td">
+                        <input type="text" value={newRow.description} onChange={e => setNewRow({ ...newRow, description: e.target.value })}
+                          placeholder="Description..." className="budget-cell-input" onKeyDown={handleNewRowKeyDown} />
+                      </td>
+                      <td className="budget-td">
+                        <input type="number" step="1" value={newRow.credit} onChange={e => setNewRow({ ...newRow, credit: e.target.value })}
+                          placeholder="0" className="budget-cell-input text-right" onKeyDown={handleNewRowKeyDown} />
+                      </td>
+                      <td className="budget-td">
+                        <input type="number" step="1" value={newRow.debit} onChange={e => setNewRow({ ...newRow, debit: e.target.value })}
+                          placeholder="0" className="budget-cell-input text-right" onKeyDown={handleNewRowKeyDown} />
+                      </td>
+                      <td className="budget-td">
+                        <div className="flex gap-0.5">
+                          <Button variant="ghost" size="icon" className="h-6 w-6 text-emerald-500 hover:bg-emerald-500/10" onClick={saveNewRow}>
+                            <Check className="w-3 h-3" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:bg-muted" onClick={() => setNewRow(null)}>
+                            <X className="w-3 h-3" />
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+
                   {processedRows.map((r, idx) => (
                     <tr key={r.id} className={`budget-row group ${idx % 2 === 0 ? 'bg-card/20' : ''}`}>
                       <td className="budget-td text-center text-muted-foreground/40 text-xs font-mono">{idx + 1}</td>
@@ -452,39 +495,6 @@ export const Budget = () => {
                       </td>
                     </tr>
                   ))}
-
-                  {/* New Row */}
-                  {newRow && (
-                    <tr className="budget-row bg-primary/5 border-t-2 border-primary/20">
-                      <td className="budget-td text-center text-muted-foreground/40 text-xs font-mono">+</td>
-                      <td className="budget-td">
-                        <input type="date" value={newRow.date} onChange={e => setNewRow({ ...newRow, date: e.target.value })}
-                          className="budget-cell-input" autoFocus onKeyDown={handleNewRowKeyDown} />
-                      </td>
-                      <td className="budget-td">
-                        <input type="text" value={newRow.description} onChange={e => setNewRow({ ...newRow, description: e.target.value })}
-                          placeholder="Description..." className="budget-cell-input" onKeyDown={handleNewRowKeyDown} />
-                      </td>
-                      <td className="budget-td">
-                        <input type="number" step="1" value={newRow.credit} onChange={e => setNewRow({ ...newRow, credit: e.target.value })}
-                          placeholder="0" className="budget-cell-input text-right" onKeyDown={handleNewRowKeyDown} />
-                      </td>
-                      <td className="budget-td">
-                        <input type="number" step="1" value={newRow.debit} onChange={e => setNewRow({ ...newRow, debit: e.target.value })}
-                          placeholder="0" className="budget-cell-input text-right" onKeyDown={handleNewRowKeyDown} />
-                      </td>
-                      <td className="budget-td">
-                        <div className="flex gap-0.5">
-                          <Button variant="ghost" size="icon" className="h-6 w-6 text-emerald-500 hover:bg-emerald-500/10" onClick={saveNewRow}>
-                            <Check className="w-3 h-3" />
-                          </Button>
-                          <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:bg-muted" onClick={() => setNewRow(null)}>
-                            <X className="w-3 h-3" />
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  )}
                 </tbody>
               </table>
             </div>

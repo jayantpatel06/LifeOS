@@ -31,12 +31,12 @@ export const FocusTimer = () => {
   const ambientRef = useRef(null);
   const [resetConfirmMode, setResetConfirmMode] = useState(null); // pending mode switch
 
-  const fetchStats = useCallback(async () => {
+  const fetchStats = useCallback(async (signal) => {
     try {
-      const response = await api.get('/focus/stats');
+      const response = await api.get('/focus/stats', { signal });
       setStats(response.data);
     } catch (error) {
-      console.error('Failed to fetch focus stats:', error);
+      if (!signal?.aborted) console.error('Failed to fetch focus stats:', error);
     }
   }, [api]);
 
@@ -84,12 +84,14 @@ export const FocusTimer = () => {
   }, [mode, currentSession, sessionsCompleted, api, fetchStats, refreshUser, soundEnabled, customDuration]);
 
   useEffect(() => {
-    fetchStats();
+    const controller = new AbortController();
+    fetchStats(controller.signal);
     // Create audio elements
     audioRef.current = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
     ambientRef.current = new Audio('https://assets.mixkit.co/active_storage/sfx/125/125-preview.mp3'); // Example rain/ambient loop
     ambientRef.current.loop = true;
     ambientRef.current.volume = 0.4;
+    return () => controller.abort();
   }, [fetchStats]);
 
   useEffect(() => {
