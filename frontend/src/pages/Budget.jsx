@@ -319,21 +319,21 @@ export const Budget = () => {
         {activeSheetId && (
           <div className="flex gap-2 shrink-0 ml-4">
             <Button variant="outline" size="sm" onClick={startNewRow} className="gap-1.5">
-              <Plus className="w-3.5 h-3.5" /> Add Row
+              <Plus className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Add Row</span>
             </Button>
             <Button variant="outline" size="sm" onClick={() => csvInputRef.current?.click()} className="gap-1.5">
-              <Upload className="w-3.5 h-3.5" /> Import
+              <Upload className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Import</span>
             </Button>
             <input ref={csvInputRef} type="file" accept=".csv,.xlsx,.xls" onChange={handleCsvImport} className="hidden" />
             <Button variant="outline" size="sm" onClick={handleCsvExport} className="gap-1.5">
-              <Download className="w-3.5 h-3.5" /> Export
+              <Download className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Export</span>
             </Button>
           </div>
         )}
       </div>
 
       {/* Spreadsheet Area */}
-      <div className="flex-1 rounded-xl overflow-hidden flex flex-col bg-card/30 shadow-neu">
+      <div className="flex-1 rounded-t-md overflow-hidden flex flex-col bg-card/30 shadow-neu">
         {activeSheetId ? (
           <>
             {/* Table */}
@@ -500,7 +500,7 @@ export const Budget = () => {
             </div>
 
             {/* Totals Footer Bar */}
-            <div className="bg-muted/40 px-4 py-2.5 rounded-b-xl flex items-center justify-start gap-8">
+            <div className="bg-muted/40 px-4 py-2.5 flex items-center justify-start gap-8">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Total:</span>
                 <span className="font-mono font-bold text-sm text-blue-500">{formatNum(totalCredit - totalDebit)}</span>

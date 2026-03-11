@@ -164,7 +164,8 @@ export const Settings = () => {
                 <p>Max streak: <span className="text-foreground font-semibold">{user?.longest_streak || 0}</span></p>
               </div>
             </div>
-            <div className="flex justify-between items-start w-full">
+            <div className="overflow-x-auto pb-2 -mx-2 px-2">
+              <div className="flex justify-between items-start w-full min-w-[950px]">
               <TooltipProvider>
                 {monthsData.map((month, mIdx) => (
                   <div key={mIdx} className="flex flex-col gap-1 flex-1 max-w-fit">
@@ -200,6 +201,7 @@ export const Settings = () => {
                   </div>
                 ))}
               </TooltipProvider>
+            </div>
             </div>
           </div>
         </CardContent>

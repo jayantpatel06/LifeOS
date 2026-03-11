@@ -85,7 +85,7 @@ const EditorToolbar = ({ editor, onBack }) => {
   );
 
   return (
-    <div className="bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 p-1 flex flex-wrap gap-0.5 sticky top-0 z-10 items-center shadow-neu-inset-sm rounded-b-xl">
+    <div className="bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 p-1 pl-5 flex flex-wrap gap-0.5 sticky top-0 z-10 items-center shadow-neu-inset-sm rounded-b-xl">
       <Button
         variant="ghost"
         size="icon"
@@ -174,7 +174,7 @@ const NoteTreeItem = ({ note, level, onSelect, selectedId, onToggleExpand, expan
             ? "bg-primary/10 text-primary font-semibold shadow-neu-sm"
             : "text-foreground/80 hover:bg-muted/60 hover:text-foreground hover:shadow-neu-xs"
         )}
-        style={{ paddingLeft: `${level * 16 + 12}px` }}
+        style={{ paddingLeft: `${level * 16 + 4}px` }}
         onClick={() => onSelect(note)}
       >
         <div
@@ -314,7 +314,7 @@ export const Notes = () => {
     content: '',
     editorProps: {
       attributes: {
-        class: 'prose prose-invert max-w-none w-full focus:outline-none min-h-[500px] py-4 px-4 text-base leading-relaxed break-words whitespace-pre-wrap [&_img]:max-h-[350px] [&_img]:w-auto [&_img]:rounded-2xl [&_img]:shadow-neu-sm [&_img]:cursor-zoom-in [&_img]:inline-block [&_img]:mr-2 [&_img]:mb-2 [&_img]:align-top'
+        class: 'prose prose-invert max-w-none w-full focus:outline-none min-h-[200px] py-4 px-4 text-base leading-relaxed break-words whitespace-pre-wrap [&_img]:max-h-[350px] [&_img]:w-auto [&_img]:rounded-2xl [&_img]:shadow-neu-sm [&_img]:cursor-zoom-in [&_img]:inline-block [&_img]:mr-2 [&_img]:mb-2 [&_img]:align-top'
       },
       handleClick: (view, pos, event) => {
         const link = event.target.closest('a');
@@ -607,7 +607,7 @@ export const Notes = () => {
       </AnimatePresence>
 
       {/* Main Layout */}
-      <div className="flex-1 rounded-2xl overflow-hidden bg-card/10 backdrop-blur-sm shadow-neu">
+      <div className="flex-1 rounded-t-xl overflow-hidden bg-card/10 backdrop-blur-sm shadow-neu">
         {selectedNote ? (
           <div className="h-full flex flex-col bg-background">
             {/* Toolbar Area */}
@@ -615,8 +615,8 @@ export const Notes = () => {
               <EditorToolbar editor={editor} onBack={handleBack} />
             </div>
 
-            <ScrollArea className="flex-1">
-              <div className="p-4 w-full">
+            <div className="flex-1 overflow-y-auto overflow-x-auto">
+              <div className="p-2 px-5 md:p-4 md:pl-8 w-full">
                 {/* Title Input */}
                 <input
                   value={selectedNote.title}
@@ -626,16 +626,16 @@ export const Notes = () => {
                 />
 
                 {/* Content */}
-                <div className="min-h-[500px]" onClick={() => editor?.chain().focus().run()}>
+                <div className="min-h-[380px]" onClick={() => editor?.chain().focus().run()}>
                   <EditorContent editor={editor} className="prose prose-stone dark:prose-invert max-w-none leading-normal" />
                 </div>
-
-                {/* Footer Meta */}
-                <div className="pt-4 text-s text-muted-foreground/60">
-                  Last updated: {format(new Date(selectedNote.updated_at), 'MMM d, h:mm a')}
-                </div>
               </div>
-            </ScrollArea>
+            </div>
+
+            {/* Footer Meta — pinned to bottom */}
+            <div className="px-6 py-2 text-xs text-muted-foreground/60 shrink-0">
+              Last updated: {format(new Date(selectedNote.updated_at), 'MMM d, h:mm a')}
+            </div>
           </div>
         ) : (
           <div className="h-full flex flex-col bg-background">
@@ -649,7 +649,7 @@ export const Notes = () => {
             <div className="mx-0 h-px bg-gradient-to-r from-transparent via-muted-foreground/15 to-transparent" />
 
             <ScrollArea className="flex-1">
-              <div className="p-4 space-y-0.5">
+              <div className="p-3 space-y-0.5">
                 {noteTree.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-16 text-muted-foreground/50">
                     <div className="w-12 h-12 bg-muted/20 rounded-full flex items-center justify-center mb-4">

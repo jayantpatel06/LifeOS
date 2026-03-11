@@ -1,7 +1,6 @@
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { cn } from '../../lib/utils';
-import { Button } from '../ui/button';
 import { ScrollArea } from '../ui/scroll-area';
 import { Separator } from '../ui/separator';
 import {
@@ -14,12 +13,8 @@ import {
   Settings,
 
   Flame,
-  Zap,
-  Menu,
-  X,
-  ChevronRight
+  Zap
 } from 'lucide-react';
-import { useState, useEffect } from 'react';
 import {
   Tooltip,
   TooltipContent,
@@ -37,10 +32,8 @@ const navItems = [
   { to: '/settings', icon: Settings, label: 'Settings' },
 ];
 
-export const Sidebar = ({ isCollapsed, toggleCollapse }) => {
+export const Sidebar = ({ isCollapsed, toggleCollapse, mobileOpen, setMobileOpen }) => {
   const { user } = useAuth();
-  const navigate = useNavigate();
-  const [mobileOpen, setMobileOpen] = useState(false);
 
 
   const NavItem = ({ item }) => {
@@ -152,25 +145,6 @@ export const Sidebar = ({ isCollapsed, toggleCollapse }) => {
 
   return (
     <>
-      {/* Mobile toggle button */}
-      <Button
-        variant="ghost"
-        size="icon"
-        className="fixed top-4 left-4 z-50 md:hidden"
-        onClick={() => setMobileOpen(!mobileOpen)}
-        data-testid="mobile-menu-toggle"
-      >
-        {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-      </Button>
-
-      {/* Mobile overlay */}
-      {mobileOpen && (
-        <div
-          className="fixed inset-0 bg-background/80 backdrop-blur-sm z-40 md:hidden"
-          onClick={() => setMobileOpen(false)}
-        />
-      )}
-
       {/* Sidebar */}
       <aside
         className={cn(
