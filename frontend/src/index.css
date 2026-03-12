@@ -77,24 +77,26 @@ code,
   }
 }
 
-/* Custom scrollbar */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+/* Hide scrollbar globally */
+* {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge */
+}
+*::-webkit-scrollbar {
+  display: none; /* Chrome/Safari/Opera */
 }
 
-::-webkit-scrollbar-track {
-  background: transparent;
-  border-radius: 999px;
+/* Auto-scroll animation for mobile feature pills */
+@keyframes pill-scroll {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
 }
-
-::-webkit-scrollbar-thumb {
-  background: hsl(var(--muted-foreground) / 0.2);
-  border-radius: 999px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--muted-foreground) / 0.35);
+.animate-pill-scroll {
+  animation: pill-scroll 20s linear infinite;
 }
 
 /* TipTap editor styles */

@@ -128,7 +128,7 @@ export const MainLayout = () => {
               <DropdownMenuItem onClick={() => { navigate('/notes'); setMobileOpen(false); }}>
                 <FileText className="w-4 h-4 mr-2" /> Add Note
               </DropdownMenuItem>
-              <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={logout}>
+              <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => { logout(); navigate('/'); }}>
                 <LogOut className="w-4 h-4 mr-2" /> Sign Out
               </DropdownMenuItem>
             </DropdownMenuContent>
