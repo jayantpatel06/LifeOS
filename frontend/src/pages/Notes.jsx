@@ -45,7 +45,7 @@ const EditorToolbar = ({ editor, onBack }) => {
       try {
         const formData = new FormData();
         formData.append('file', file);
-        const promise = api.post('/upload', formData, {
+        const promise = api.post('/upload-image', formData, {
           headers: { 'Content-Type': 'multipart/form-data' }
         });
 
@@ -53,8 +53,19 @@ const EditorToolbar = ({ editor, onBack }) => {
           loading: 'Uploading image...',
           success: (res) => {
             const baseUrl = process.env.REACT_APP_BACKEND_URL || '';
-            const url = baseUrl + res.data.url;
-            editor.commands.setImage({ src: url });
+            const rawThumb = res.data.thumbnailUrl || res.data.url;
+            const thumbUrl = rawThumb?.startsWith('http') ? rawThumb : `${baseUrl}${rawThumb || ''}`;
+            const rawFull = res.data.fullImageUrl || thumbUrl;
+            const fullUrl = rawFull?.startsWith('http') ? rawFull : `${baseUrl}${rawFull || ''}`;
+
+            if (!thumbUrl) throw new Error('Upload response missing thumbnail URL');
+
+            // Keep thumbnail in note content; store full-res URL in alt for modal preview.
+            editor.commands.setImage({
+              src: thumbUrl,
+              alt: fullUrl,
+              title: res.data.fullImageId || ''
+            });
             return 'Image uploaded';
           },
           error: 'Failed to upload image'
@@ -327,7 +338,8 @@ export const Notes = () => {
       },
       handleClickOn: (view, pos, node, nodePos, event, direct) => {
         if (node && node.type && node.type.name === 'image') {
-          setLightboxSrc(node.attrs.src);
+          const fullSrc = (node.attrs.alt && node.attrs.alt.trim()) ? node.attrs.alt : node.attrs.src;
+          setLightboxSrc(fullSrc);
           setIsLightboxOpen(true);
           return true;
         }

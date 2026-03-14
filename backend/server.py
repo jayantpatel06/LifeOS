@@ -1,5 +1,6 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, UploadFile, File, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.responses import RedirectResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -20,6 +21,10 @@ from pymongo import UpdateOne
 import io
 import jwt
 import bcrypt
+import cloudinary
+import cloudinary.uploader
+from cloudinary.exceptions import Error as CloudinaryError
+from cloudinary.utils import cloudinary_url
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -144,6 +149,12 @@ class NoteUpdate(BaseModel):
 
 class UploadResponse(BaseModel):
     url: str
+
+class UploadImageResponse(BaseModel):
+    thumbnailId: str
+    fullImageId: str
+    thumbnailUrl: str
+    fullImageUrl: str
 
 class NoteResponse(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -362,41 +373,119 @@ async def update_daily_activity(user_id: str, field: str, increment: int = 1):
 ALLOWED_IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.bmp', '.ico'}
 MAX_UPLOAD_SIZE = 5 * 1024 * 1024  # 5MB
 
-@api_router.post("/upload", response_model=UploadResponse)
-@limiter.limit("20/minute")
-async def upload_file(request: Request, file: UploadFile = File(...), user: dict = Depends(get_current_user)):
-    """Upload an image file and return its URL."""
-    try:
-        # Validate file extension
-        ext = Path(file.filename).suffix.lower()
-        if ext not in ALLOWED_IMAGE_EXTENSIONS:
-            raise HTTPException(status_code=400, detail=f"File type '{ext}' not allowed. Allowed: {', '.join(ALLOWED_IMAGE_EXTENSIONS)}")
+_cloudinary_configured = False
 
-        # Validate file size
+
+def _configure_cloudinary():
+    global _cloudinary_configured
+    if _cloudinary_configured:
+        return
+
+    cloud_name = os.environ.get("CLOUDINARY_CLOUD_NAME", "").strip()
+    api_key = os.environ.get("CLOUDINARY_API_KEY", "").strip()
+    api_secret = os.environ.get("CLOUDINARY_API_SECRET", "").strip()
+
+    if not cloud_name or not api_key or not api_secret:
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "Cloudinary is not configured. Set CLOUDINARY_CLOUD_NAME, "
+                "CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET in backend/.env"
+            ),
+        )
+
+    cloudinary.config(
+        cloud_name=cloud_name,
+        api_key=api_key,
+        api_secret=api_secret,
+        secure=True,
+    )
+    _cloudinary_configured = True
+
+
+def _cloudinary_thumb_url(public_id: str) -> str:
+    thumb_url, _ = cloudinary_url(
+        public_id,
+        secure=True,
+        resource_type="image",
+        transformation=[{"width": 200, "crop": "scale", "quality": "auto", "fetch_format": "auto"}],
+    )
+    return thumb_url
+
+
+@api_router.post("/upload-image", response_model=UploadImageResponse)
+@app.post("/upload-image", response_model=UploadImageResponse)
+@limiter.limit("20/minute")
+async def upload_image(request: Request, file: UploadFile = File(...), user: dict = Depends(get_current_user)):
+    """Upload image to Cloudinary and return thumbnail + full image references."""
+    try:
+        ext = Path(file.filename or "").suffix.lower()
+        if ext not in ALLOWED_IMAGE_EXTENSIONS:
+            raise HTTPException(status_code=400, detail=f"File type '{ext}' not allowed. Allowed: {', '.join(sorted(ALLOWED_IMAGE_EXTENSIONS))}")
+
         content = await file.read()
+        if not content:
+            raise HTTPException(status_code=400, detail="Empty file")
         if len(content) > MAX_UPLOAD_SIZE:
             raise HTTPException(status_code=400, detail=f"File too large. Maximum size is {MAX_UPLOAD_SIZE // (1024*1024)}MB")
 
-        # Create upload directory if not exists
-        upload_dir = ROOT_DIR / "static" / "uploads"
-        upload_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Generate unique filename
-        filename = f"{uuid.uuid4()}{ext}"
-        filepath = upload_dir / filename
-        
-        # Save file
-        with open(filepath, "wb") as buffer:
-            buffer.write(content)
-            
-        # Return URL
-        url = f"/static/uploads/{filename}"
-        return UploadResponse(url=url)
+        _configure_cloudinary()
+        folder = os.environ.get("CLOUDINARY_FOLDER", "NotesAppImages").strip() or "NotesAppImages"
+
+        base_public_id = f"{user['id']}_{uuid.uuid4().hex}"
+        upload_stream = io.BytesIO(content)
+        upload_stream.name = file.filename or f"{base_public_id}{ext or '.jpg'}"
+
+        uploaded = cloudinary.uploader.upload(
+            upload_stream,
+            resource_type="image",
+            folder=folder,
+            public_id=base_public_id,
+            overwrite=False,
+            use_filename=False,
+            unique_filename=False,
+        )
+
+        full_id = uploaded.get("public_id")
+        full_url = uploaded.get("secure_url") or uploaded.get("url")
+        if not full_id or not full_url:
+            raise HTTPException(status_code=500, detail="Cloudinary upload failed to return file metadata")
+
+        thumb_url = _cloudinary_thumb_url(full_id)
+
+        return UploadImageResponse(
+            thumbnailId=f"{full_id}:thumb200",
+            fullImageId=full_id,
+            thumbnailUrl=thumb_url,
+            fullImageUrl=full_url,
+        )
     except HTTPException:
         raise
+    except CloudinaryError as e:
+        logger.error(f"Cloudinary upload error: {e}")
+        raise HTTPException(status_code=502, detail=f"Cloudinary upload failed: {str(e)}")
     except Exception as e:
-        logger.error(f"File upload error: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to upload file: {str(e)}")
+        logger.error(f"Image upload error: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to upload image: {str(e)}")
+
+
+@api_router.post("/upload", response_model=UploadResponse)
+@limiter.limit("20/minute")
+async def upload_file(request: Request, file: UploadFile = File(...), user: dict = Depends(get_current_user)):
+    """Backward-compatible upload endpoint returning thumbnail URL."""
+    uploaded = await upload_image(request, file, user)
+    return UploadResponse(url=uploaded.thumbnailUrl)
+
+
+@api_router.get("/image/{file_id:path}")
+@app.get("/image/{file_id:path}")
+async def get_image(file_id: str):
+    """Resolve image by Cloudinary public_id and redirect to its CDN URL."""
+    _configure_cloudinary()
+    # If a thumbnail pseudo-id is passed, map to original image id.
+    normalized_id = file_id.replace(":thumb200", "")
+    full_url, _ = cloudinary_url(normalized_id, secure=True, resource_type="image")
+    return RedirectResponse(full_url, status_code=307)
 
 # ============ AUTH ROUTES ============
 
