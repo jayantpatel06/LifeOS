@@ -16,12 +16,12 @@ module.exports = {
   			'3xl': '2rem',
   		},
   		boxShadow: {
-  			'neu': '6px 6px 12px hsl(240 10% 2.5%), -6px -6px 12px hsl(240 10% 8%)',
-  			'neu-sm': '3px 3px 6px hsl(240 10% 2.5%), -3px -3px 6px hsl(240 10% 8%)',
-  			'neu-xs': '2px 2px 4px hsl(240 10% 2.5%), -2px -2px 4px hsl(240 10% 8%)',
-  			'neu-inset': 'inset 2px 2px 5px hsl(240 10% 2.5%), inset -2px -2px 5px hsl(240 10% 8%)',
-  			'neu-inset-sm': 'inset 1px 1px 3px hsl(240 10% 2.5%), inset -1px -1px 3px hsl(240 10% 8%)',
-  			'neu-flat': '0 1px 3px hsl(240 10% 2.5%), 0 -1px 2px hsl(240 10% 8%)',
+			'neu': '4px 4px 9px hsl(240 10% 2.5% / 0.45), -4px -4px 9px hsl(240 10% 8% / 0.35)',
+			'neu-sm': '2px 2px 5px hsl(240 10% 2.5% / 0.42), -2px -2px 5px hsl(240 10% 8% / 0.32)',
+			'neu-xs': '1px 1px 3px hsl(240 10% 2.5% / 0.38), -1px -1px 3px hsl(240 10% 8% / 0.28)',
+			'neu-inset': 'inset 1px 1px 3px hsl(240 10% 2.5% / 0.38), inset -1px -1px 3px hsl(240 10% 8% / 0.28)',
+			'neu-inset-sm': 'inset 1px 1px 2px hsl(240 10% 2.5% / 0.3), inset -1px -1px 2px hsl(240 10% 8% / 0.2)',
+			'neu-flat': '0 1px 2px hsl(240 10% 2.5% / 0.35), 0 -1px 1px hsl(240 10% 8% / 0.25)',
   		},
   		colors: {
   			background: 'hsl(var(--background))',

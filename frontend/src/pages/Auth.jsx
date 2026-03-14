@@ -183,7 +183,7 @@ export const Auth = () => {
       <section className="min-h-screen flex flex-col relative overflow-hidden">
         {/* Navbar — Glassmorphism */}
         <nav className="relative z-20 flex items-center justify-center px-4 md:px-8 pt-5 shrink-0">
-          <div className="flex items-center justify-between w-full max-w-4xl px-5 py-2.5 rounded-full bg-card/30 backdrop-blur-xl border border-border/20 shadow-lg shadow-black/10">
+          <div className="flex items-center justify-between w-full max-w-4xl px-5 py-2.5 rounded-full bg-white/10 backdrop-blur-xl border border-white/35 shadow-[0_0_0_1px_rgba(255,255,255,0.18),0_0_26px_rgba(255,255,255,0.22)]">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-lg overflow-hidden">
                 <img src="/logo192-v2.png" alt="LifeOS" className="w-full h-full object-cover" />
