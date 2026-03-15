@@ -17,10 +17,11 @@ import Placeholder from '@tiptap/extension-placeholder';
 import Mention from '@tiptap/extension-mention';
 import createSuggestion from '../extensions/suggestion';
 import Instagram from '../extensions/Instagram';
+import { isInstagramUrl, getInstagramId } from '../extensions/Instagram';
 import {
   Plus, FileText, Trash2, Edit, Star, StarOff,
   Bold, Italic, Strikethrough, Code, List, ListOrdered, Quote, Heading1, Heading2,
-  Link as LinkIcon, Image as ImageIcon, Youtube as YoutubeIcon, Instagram as InstagramIcon,
+  Link as LinkIcon, Image as ImageIcon,
   Search, ChevronRight, ChevronDown, File, Upload, ArrowLeft, X
 } from 'lucide-react';
 
@@ -28,16 +29,6 @@ import {
 const EditorToolbar = ({ editor, onBack }) => {
   const { api } = useAuth();
   if (!editor) return null;
-
-  const addYoutubeVideo = () => {
-    const url = window.prompt('Enter YouTube URL:');
-    if (url) editor.commands.setYoutubeVideo({ src: url });
-  };
-
-  const addImage = () => {
-    const url = window.prompt('Enter image URL:');
-    if (url) editor.commands.setImage({ src: url });
-  };
 
   const handleImageUpload = async (e) => {
     const file = e.target.files?.[0];
@@ -60,7 +51,6 @@ const EditorToolbar = ({ editor, onBack }) => {
 
             if (!thumbUrl) throw new Error('Upload response missing thumbnail URL');
 
-            // Keep thumbnail in note content; store full-res URL in alt for modal preview.
             editor.commands.setImage({
               src: thumbUrl,
               alt: fullUrl,
@@ -75,11 +65,6 @@ const EditorToolbar = ({ editor, onBack }) => {
       }
     }
     e.target.value = '';
-  };
-
-  const addInstagramPost = () => {
-    const url = window.prompt('Enter Instagram post or reel URL:');
-    if (url) editor.commands.setInstagramPost({ src: url });
   };
 
   const ToolbarBtn = ({ onClick, isActive, icon: Icon, title }) => (
@@ -126,9 +111,6 @@ const EditorToolbar = ({ editor, onBack }) => {
 
       <div className="w-px h-5 bg-muted-foreground/15 rounded-full mx-1 self-center" />
 
-      <ToolbarBtn onClick={addYoutubeVideo} icon={YoutubeIcon} title="Add YouTube" />
-      <ToolbarBtn onClick={addInstagramPost} icon={InstagramIcon} title="Add Instagram" />
-      <ToolbarBtn onClick={addImage} icon={ImageIcon} title="Add Image URL" />
       <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" onClick={() => document.getElementById('image-upload').click()} title="Upload Image">
         <Upload className="w-4 h-4" />
       </Button>
@@ -326,6 +308,55 @@ export const Notes = () => {
     editorProps: {
       attributes: {
         class: 'prose prose-invert max-w-none w-full focus:outline-none min-h-[200px] py-4 px-4 text-base leading-relaxed break-words whitespace-pre-wrap [&_img]:max-h-[350px] [&_img]:w-auto [&_img]:rounded-2xl [&_img]:shadow-neu-sm [&_img]:cursor-zoom-in [&_img]:inline-block [&_img]:mr-2 [&_img]:mb-2 [&_img]:align-top'
+      },
+      handlePaste: (view, event) => {
+        const text = event.clipboardData?.getData('text/plain')?.trim();
+        if (!text) return false;
+
+        // YouTube detection
+        const ytMatch = text.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/)([\w-]+)/);
+        if (ytMatch) {
+          event.preventDefault();
+          const node = view.state.schema.nodes.youtube;
+          if (node) {
+            const tr = view.state.tr.replaceSelectionWith(
+              node.create({ src: text })
+            );
+            view.dispatch(tr);
+            return true;
+          }
+        }
+
+        // Instagram detection
+        if (isInstagramUrl(text)) {
+          const result = getInstagramId(text);
+          if (result) {
+            event.preventDefault();
+            const node = view.state.schema.nodes.instagram;
+            if (node) {
+              const tr = view.state.tr.replaceSelectionWith(
+                node.create({ src: text, postId: result.id, isReel: result.isReel })
+              );
+              view.dispatch(tr);
+              return true;
+            }
+          }
+        }
+
+        // Image URL detection
+        if (/^https?:\/\/.+\.(jpg|jpeg|png|gif|webp|svg|bmp)(\?.*)?$/i.test(text)) {
+          event.preventDefault();
+          const node = view.state.schema.nodes.image;
+          if (node) {
+            const tr = view.state.tr.replaceSelectionWith(
+              node.create({ src: text })
+            );
+            view.dispatch(tr);
+            return true;
+          }
+        }
+
+        return false;
       },
       handleClick: (view, pos, event) => {
         const link = event.target.closest('a');

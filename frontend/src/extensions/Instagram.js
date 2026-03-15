@@ -3,9 +3,9 @@ import { Node, mergeAttributes } from '@tiptap/core';
 // Extract Instagram post/reel ID from URL
 const getInstagramId = (url) => {
   const patterns = [
-    /instagram\.com\/p\/([^/?#&]+)/,
-    /instagram\.com\/reel\/([^/?#&]+)/,
-    /instagram\.com\/reels\/([^/?#&]+)/,
+    /instagram\.com\/(?:[^/]+\/)?p\/([^/?#&]+)/,
+    /instagram\.com\/(?:[^/]+\/)?reel\/([^/?#&]+)/,
+    /instagram\.com\/(?:[^/]+\/)?reels\/([^/?#&]+)/,
   ];
 
   for (const pattern of patterns) {
@@ -19,7 +19,7 @@ const getInstagramId = (url) => {
 
 // Check if URL is an Instagram URL
 const isInstagramUrl = (url) => {
-  return /instagram\.com\/(p|reel|reels)\//.test(url);
+  return /instagram\.com\/(?:[^/]+\/)?(p|reel|reels)\//.test(url);
 };
 
 const Instagram = Node.create({
@@ -39,15 +39,9 @@ const Instagram = Node.create({
 
   addAttributes() {
     return {
-      src: {
-        default: null,
-      },
-      postId: {
-        default: null,
-      },
-      isReel: {
-        default: false,
-      },
+      src: { default: null },
+      postId: { default: null },
+      isReel: { default: false },
     };
   },
 
@@ -55,19 +49,27 @@ const Instagram = Node.create({
     return [
       {
         tag: 'div[data-instagram-embed]',
+        getAttrs: (element) => ({
+          src: element.getAttribute('data-src'),
+          postId: element.getAttribute('data-post-id'),
+          isReel: element.getAttribute('data-is-reel') === 'true',
+        }),
       },
     ];
   },
 
   renderHTML({ HTMLAttributes }) {
-    const postId = HTMLAttributes.postId;
+    const { src, postId, isReel, ...rest } = HTMLAttributes;
     const embedUrl = `https://www.instagram.com/p/${postId}/embed/`;
 
     return [
       'div',
-      mergeAttributes(this.options.HTMLAttributes, {
+      mergeAttributes(this.options.HTMLAttributes, rest, {
         'data-instagram-embed': '',
-        'class': 'instagram-embed',
+        'data-src': src,
+        'data-post-id': postId,
+        'data-is-reel': isReel,
+        'class': 'instagram-embed my-4 flex justify-center',
       }),
       [
         'iframe',
@@ -79,9 +81,35 @@ const Instagram = Node.create({
           scrolling: 'no',
           allowtransparency: 'true',
           allowfullscreen: 'true',
+          class: 'rounded-xl shadow-neu-sm bg-muted/10'
         },
       ],
     ];
+  },
+
+  addNodeView() {
+    return ({ node }) => {
+      const { postId } = node.attrs;
+      const embedUrl = `https://www.instagram.com/p/${postId}/embed/`;
+
+      const wrapper = document.createElement('div');
+      wrapper.classList.add('instagram-embed', 'my-4', 'flex', 'justify-center');
+      wrapper.setAttribute('data-instagram-embed', '');
+      wrapper.contentEditable = 'false';
+
+      const iframe = document.createElement('iframe');
+      iframe.src = embedUrl;
+      iframe.width = String(this.options.width);
+      iframe.height = String(this.options.height);
+      iframe.frameBorder = '0';
+      iframe.scrolling = 'no';
+      iframe.allowFullscreen = true;
+      iframe.classList.add('rounded-xl', 'shadow-neu-sm', 'bg-muted/10');
+
+      wrapper.appendChild(iframe);
+
+      return { dom: wrapper };
+    };
   },
 
   addCommands() {
