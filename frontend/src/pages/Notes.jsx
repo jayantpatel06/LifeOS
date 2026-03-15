@@ -621,7 +621,7 @@ export const Notes = () => {
   if (loading) return <div className="flex justify-center mt-20"><div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" /></div>;
 
   return (
-    <div className="h-[calc(100vh-2rem)] flex flex-col" data-testid="notes-page">
+    <div className="h-[calc(100dvh-6rem)] md:h-[calc(100vh-2rem)] flex flex-col" data-testid="notes-page">
       <AnimatePresence>
         {isLightboxOpen && (
           <motion.div
@@ -655,7 +655,7 @@ export const Notes = () => {
               <EditorToolbar editor={editor} onBack={handleBack} />
             </div>
 
-            <div className="flex-1 overflow-y-auto overflow-x-auto">
+            <div className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain" style={{ WebkitOverflowScrolling: 'touch' }}>
               <div className="p-2 px-5 md:p-4 md:pl-8 w-full">
                 {/* Title Input */}
                 <input

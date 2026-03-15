@@ -215,12 +215,14 @@ code,
   vertical-align: top;
   margin: 0.25em 0.5em 0.25em 0;
   width: auto !important;
-  max-width: none;
+  max-width: 100%;
 }
 
 .tiptap div[data-youtube-video] iframe {
   width: 450px;
-  height: 270px;
+  max-width: 100%;
+  height: auto;
+  aspect-ratio: 16/9;
   border-radius: 8px;
   margin: 0 !important;
 }

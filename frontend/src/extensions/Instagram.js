@@ -110,7 +110,10 @@ const Instagram = Node.create({
 
       wrapper.appendChild(iframe);
 
-      return { dom: wrapper };
+      return {
+        dom: wrapper,
+        stopEvent: () => true,
+      };
     };
   },
 
