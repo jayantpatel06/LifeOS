@@ -25,15 +25,17 @@ const isInstagramUrl = (url) => {
 const Instagram = Node.create({
   name: 'instagram',
 
-  group: 'block',
+  group: 'inline',
+
+  inline: true,
 
   atom: true,
 
   addOptions() {
     return {
       HTMLAttributes: {},
-      width: 400,
-      height: 500,
+      width: 280,
+      height: 400,
     };
   },
 
@@ -48,7 +50,7 @@ const Instagram = Node.create({
   parseHTML() {
     return [
       {
-        tag: 'div[data-instagram-embed]',
+        tag: 'span[data-instagram-embed]',
         getAttrs: (element) => ({
           src: element.getAttribute('data-src'),
           postId: element.getAttribute('data-post-id'),
@@ -63,13 +65,13 @@ const Instagram = Node.create({
     const embedUrl = `https://www.instagram.com/p/${postId}/embed/`;
 
     return [
-      'div',
+      'span',
       mergeAttributes(this.options.HTMLAttributes, rest, {
         'data-instagram-embed': '',
         'data-src': src,
         'data-post-id': postId,
         'data-is-reel': isReel,
-        'class': 'instagram-embed my-4 flex justify-center',
+        'class': 'instagram-embed',
       }),
       [
         'iframe',
@@ -92,8 +94,8 @@ const Instagram = Node.create({
       const { postId } = node.attrs;
       const embedUrl = `https://www.instagram.com/p/${postId}/embed/`;
 
-      const wrapper = document.createElement('div');
-      wrapper.classList.add('instagram-embed', 'my-4', 'flex', 'justify-center');
+      const wrapper = document.createElement('span');
+      wrapper.classList.add('instagram-embed');
       wrapper.setAttribute('data-instagram-embed', '');
       wrapper.contentEditable = 'false';
 

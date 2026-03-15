@@ -33,35 +33,31 @@ const EditorToolbar = ({ editor, onBack }) => {
   const handleImageUpload = async (e) => {
     const file = e.target.files?.[0];
     if (file) {
+      const toastId = toast.loading('Uploading image...');
       try {
         const formData = new FormData();
         formData.append('file', file);
-        const promise = api.post('/upload-image', formData, {
+        const res = await api.post('/upload-image', formData, {
           headers: { 'Content-Type': 'multipart/form-data' }
         });
 
-        toast.promise(promise, {
-          loading: 'Uploading image...',
-          success: (res) => {
-            const baseUrl = process.env.REACT_APP_BACKEND_URL || '';
-            const rawThumb = res.data.thumbnailUrl || res.data.url;
-            const thumbUrl = rawThumb?.startsWith('http') ? rawThumb : `${baseUrl}${rawThumb || ''}`;
-            const rawFull = res.data.fullImageUrl || thumbUrl;
-            const fullUrl = rawFull?.startsWith('http') ? rawFull : `${baseUrl}${rawFull || ''}`;
+        const baseUrl = process.env.REACT_APP_BACKEND_URL || '';
+        const rawThumb = res.data.thumbnailUrl || res.data.url;
+        const thumbUrl = rawThumb?.startsWith('http') ? rawThumb : `${baseUrl}${rawThumb || ''}`;
+        const rawFull = res.data.fullImageUrl || thumbUrl;
+        const fullUrl = rawFull?.startsWith('http') ? rawFull : `${baseUrl}${rawFull || ''}`;
 
-            if (!thumbUrl) throw new Error('Upload response missing thumbnail URL');
+        if (!thumbUrl) throw new Error('Upload response missing thumbnail URL');
 
-            editor.commands.setImage({
-              src: thumbUrl,
-              alt: fullUrl,
-              title: res.data.fullImageId || ''
-            });
-            return 'Image uploaded';
-          },
-          error: 'Failed to upload image'
+        editor.commands.setImage({
+          src: thumbUrl,
+          alt: fullUrl,
+          title: res.data.fullImageId || ''
         });
+        toast.success('Image uploaded', { id: toastId });
       } catch (error) {
         console.error("Upload failed", error);
+        toast.error('Failed to upload image', { id: toastId });
       }
     }
     e.target.value = '';
@@ -81,7 +77,7 @@ const EditorToolbar = ({ editor, onBack }) => {
   );
 
   return (
-    <div className="bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 p-1 pl-5 flex flex-wrap gap-0.5 sticky top-0 z-10 items-center shadow-neu-inset-sm rounded-b-xl">
+    <div className="bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 p-1 pl-5 flex flex-wrap gap-1 sticky top-0 z-10 items-center shadow-neu-inset-sm rounded-b-xl">
       <Button
         variant="ghost"
         size="icon"
@@ -279,8 +275,8 @@ export const Notes = () => {
       StarterKit,
       Link.configure({ openOnClick: false, HTMLAttributes: { target: '_blank', rel: 'noopener noreferrer', class: 'text-primary underline cursor-pointer hover:text-primary/80' } }),
       Image.configure({ inline: true }),
-      Youtube.configure({ width: 640, height: 360, controls: true }),
-      Instagram.configure({ width: 400, height: 500 }),
+      Youtube.configure({width: 450, height: 270, controls: true }),
+      Instagram.configure({ width: 280, height: 400 }),
       Mention.configure({
         HTMLAttributes: {
           class: 'mention bg-primary/20 text-primary px-1.5 py-0.5 rounded-lg cursor-pointer font-medium hover:bg-primary/30 transition-colors',
@@ -319,8 +315,9 @@ export const Notes = () => {
           event.preventDefault();
           const node = view.state.schema.nodes.youtube;
           if (node) {
+          const isShorts = text.includes('/shorts/');
             const tr = view.state.tr.replaceSelectionWith(
-              node.create({ src: text })
+              node.create({ src: text, width:450, height:270 })
             );
             view.dispatch(tr);
             return true;

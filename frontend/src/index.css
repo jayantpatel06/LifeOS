@@ -210,23 +210,34 @@ code,
 }
 
 /* YouTube embed styles */
-.tiptap iframe {
-  width: 100%;
-  aspect-ratio: 16/9;
+.tiptap div[data-youtube-video] {
+  display: inline-block !important;
+  vertical-align: top;
+  margin: 0.25em 0.5em 0.25em 0;
+  width: auto !important;
+  max-width: none;
+}
+
+.tiptap div[data-youtube-video] iframe {
+  width: 450px;
+  height: 270px;
   border-radius: 8px;
-  margin: 1em 0;
+  margin: 0 !important;
 }
 
 /* Instagram embed styles */
 .tiptap .instagram-embed {
-  display: flex;
-  justify-content: center;
-  margin: 1em 0;
+  display: inline-block !important;
+  vertical-align: top;
+  margin: 0.25em 0.5em 0.25em 0;
+  width: auto !important;
+  max-width: none;
 }
 
 .tiptap .instagram-embed iframe {
-  max-width: 400px;
-  aspect-ratio: 4/5;
+  margin: 0 !important;
+  width: 280px;
+  height: 400px;
   border-radius: 16px;
   border: none;
   box-shadow:
