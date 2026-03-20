@@ -1,4 +1,5 @@
 import { NavLink } from 'react-router-dom';
+import { memo } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { cn } from '../../lib/utils';
 import { ScrollArea } from '../ui/scroll-area';
@@ -32,7 +33,7 @@ const navItems = [
   { to: '/settings', icon: Settings, label: 'Settings' },
 ];
 
-export const Sidebar = ({ isCollapsed, toggleCollapse, mobileOpen, setMobileOpen }) => {
+export const Sidebar = memo(({ isCollapsed, toggleCollapse, mobileOpen, setMobileOpen }) => {
   const { user } = useAuth();
 
 
@@ -157,4 +158,4 @@ export const Sidebar = ({ isCollapsed, toggleCollapse, mobileOpen, setMobileOpen
       </aside>
     </>
   );
-};
+});

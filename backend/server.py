@@ -31,9 +31,18 @@ load_dotenv(ROOT_DIR / '.env')
 
 import certifi
 
-# MongoDB connection
+# MongoDB connection (tuned for lower latency)
 mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url, tlsCAFile=certifi.where())
+client = AsyncIOMotorClient(
+    mongo_url,
+    tlsCAFile=certifi.where(),
+    maxPoolSize=20,
+    minPoolSize=5,
+    serverSelectionTimeoutMS=5000,
+    connectTimeoutMS=5000,
+    retryWrites=True,
+    retryReads=True,
+)
 db = client[os.environ['DB_NAME']]
 
 # JWT Config
@@ -586,6 +595,26 @@ async def refresh_token(request: Request, user: dict = Depends(get_current_user)
     )
     return TokenResponse(access_token=token, user=user_response)
 
+@api_router.delete("/auth/delete-account")
+async def delete_user_account(user: dict = Depends(get_current_user)):
+    """Delete user account and all associated data (cascading delete)."""
+    user_id = user["id"]
+
+    # Delete all user data from all collections
+    await db.tasks.delete_many({"user_id": user_id})
+    await db.notes.delete_many({"user_id": user_id})
+    await db.budget_rows.delete_many({"user_id": user_id})
+    await db.budget_sheets.delete_many({"user_id": user_id})
+    await db.focus_sessions.delete_many({"user_id": user_id})
+    await db.habits.delete_many({"user_id": user_id})
+    await db.daily_activity.delete_many({"user_id": user_id})
+    await db.user_achievements.delete_many({"user_id": user_id})
+
+    # Finally delete the user
+    await db.users.delete_one({"id": user_id})
+
+    return {"message": "Account and all data deleted successfully"}
+
 # ============ TASK ROUTES ============
 
 @api_router.get("/tasks", response_model=List[TaskResponse])
@@ -778,9 +807,40 @@ async def update_note(note_id: str, data: NoteUpdate, user: dict = Depends(get_c
 
 @api_router.delete("/notes/{note_id}")
 async def delete_note(note_id: str, user: dict = Depends(get_current_user)):
-    result = await db.notes.delete_one({"id": note_id, "user_id": user["id"]})
-    if result.deleted_count == 0:
+    # Find the note to be deleted
+    note = await db.notes.find_one({"id": note_id, "user_id": user["id"]}, {"_id": 0})
+    if not note:
         raise HTTPException(status_code=404, detail="Note not found")
+
+    # Get the deleted note's parent_id (could be None if it's a root note)
+    deleted_parent_id = note.get("parent_id")
+
+    # Find all children of the note being deleted
+    children = await db.notes.find(
+        {"parent_id": note_id, "user_id": user["id"]}, {"_id": 0}
+    ).sort("created_at", 1).to_list(1000)
+
+    if children:
+        # First child becomes the new parent for its siblings
+        first_child = children[0]
+        first_child_id = first_child["id"]
+
+        # Update first child's parent to deleted note's parent (promotes it up)
+        await db.notes.update_one(
+            {"id": first_child_id},
+            {"$set": {"parent_id": deleted_parent_id}}
+        )
+
+        # Update remaining children to have first child as their new parent
+        if len(children) > 1:
+            sibling_ids = [c["id"] for c in children[1:]]
+            await db.notes.update_many(
+                {"id": {"$in": sibling_ids}},
+                {"$set": {"parent_id": first_child_id}}
+            )
+
+    # Delete the note
+    await db.notes.delete_one({"id": note_id})
     return {"message": "Note deleted"}
 
 # ============ BUDGET SHEETS ROUTES ============
@@ -1188,6 +1248,47 @@ async def get_activity_data(days: int = 365, user: dict = Depends(get_current_us
     ).sort("date", 1).to_list(days)
     
     return activities
+import asyncio
+
+@api_router.get("/preload")
+async def preload_data(since: Optional[str] = None, user: dict = Depends(get_current_user)):
+    """Fetch core data in a single round-trip to reduce initial load latency."""
+    uid = user["id"]
+
+    async def _tasks():
+        query = {"user_id": uid}
+        if since:
+            query["updated_at"] = {"$gte": since}
+        return await db.tasks.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
+
+    async def _notes():
+        query = {"user_id": uid}
+        if since:
+            query["updated_at"] = {"$gte": since}
+        notes = await db.notes.find(
+            query,
+            {"_id": 0, "content": 0}  # Exclude heavy content field for speed
+        ).sort("updated_at", -1).to_list(1000)
+        for n in notes:
+            if "categories" not in n:
+                n["categories"] = [n.pop("category", "general")] if isinstance(n.get("category"), str) else n.get("category", ["general"])
+        return notes
+
+    async def _sheets():
+        query = {"user_id": uid}
+        if since:
+            # Budget sheets only track created_at currently
+            query["created_at"] = {"$gte": since}
+        return await db.budget_sheets.find(query, {"_id": 0}).sort("order", 1).to_list(100)
+
+    tasks, notes, sheets = await asyncio.gather(_tasks(), _notes(), _sheets())
+
+    return {
+        "tasks": tasks,
+        "notes": notes,
+        "budget_sheets": sheets,
+        "server_time": datetime.now(ZoneInfo("Asia/Kolkata")).isoformat()
+    }
 
 @api_router.get("/")
 async def root():
@@ -1335,14 +1436,29 @@ async def startup_db_client():
         # Create indexes for performance
         await db.users.create_index("id", unique=True)
         await db.users.create_index("email", unique=True)
+        await db.users.create_index("username", unique=True)
+
+        # Task indexes
         await db.tasks.create_index([("user_id", 1), ("status", 1)])
+        await db.tasks.create_index([("user_id", 1), ("due_date", 1)])
+        await db.tasks.create_index([("user_id", 1), ("is_pinned", -1), ("created_at", -1)])
         await db.tasks.create_index("user_id")
+
+        # Note indexes
         await db.notes.create_index("user_id")
         await db.notes.create_index([("user_id", 1), ("parent_id", 1)])
+        await db.notes.create_index([("user_id", 1), ("is_favorite", -1)])
+
+        # Budget indexes
         await db.budget_sheets.create_index("user_id")
         await db.budget_rows.create_index([("sheet_id", 1), ("user_id", 1)])
+
+        # Focus & habits indexes
         await db.focus_sessions.create_index([("user_id", 1), ("completed_at", -1)])
-        await db.habits.create_index([("user_id", 1), ("position", 1)])
+        await db.focus_sessions.create_index([("user_id", 1), ("started_at", -1)])
+        await db.habits.create_index([("user_id", 1), ("order", 1)])
+
+        # Activity & achievements indexes
         await db.daily_activity.create_index([("user_id", 1), ("date", -1)], unique=True)
         await db.user_achievements.create_index([("user_id", 1), ("achievement_id", 1)], unique=True)
         logger.info("✅ Database indexes ensured")

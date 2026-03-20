@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useCachedFetch } from '../contexts/DataCacheContext';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
@@ -29,22 +30,23 @@ export const FocusTimer = () => {
   const intervalRef = useRef(null);
   const audioRef = useRef(null);
   const ambientRef = useRef(null);
-  const [resetConfirmMode, setResetConfirmMode] = useState(null); // pending mode switch
+  const [resetConfirmMode, setResetConfirmMode] = useState(null);
 
-  const fetchStats = useCallback(async (signal) => {
-    try {
-      const response = await api.get('/focus/stats', { signal });
-      setStats(response.data);
-    } catch (error) {
-      if (!signal?.aborted) console.error('Failed to fetch focus stats:', error);
-    }
+  const [cachedStats, loading, refetchStats] = useCachedFetch('focusStats', async (signal) => {
+    const response = await api.get('/focus/stats', { signal });
+    return response.data;
   }, [api]);
+
+  useEffect(() => {
+    if (cachedStats) {
+      setStats(cachedStats);
+    }
+  }, [cachedStats]);
 
   const handleTimerComplete = useCallback(async () => {
     setIsRunning(false);
     clearInterval(intervalRef.current);
 
-    // Play notification sound
     if (soundEnabled) {
       try {
         audioRef.current?.play();
@@ -62,7 +64,7 @@ export const FocusTimer = () => {
           icon: <CheckCircle2 className="w-5 h-5 text-emerald-500" />
         });
         setSessionsCompleted(prev => prev + 1);
-        fetchStats();
+        refetchStats();
         refreshUser();
       } catch (error) {
         console.error('Failed to complete session:', error);
@@ -70,7 +72,6 @@ export const FocusTimer = () => {
       setCurrentSession(null);
     }
 
-    // Auto switch to break
     if (mode === 'focus') {
       const nextMode = sessionsCompleted > 0 && (sessionsCompleted + 1) % 4 === 0 ? 'long_break' : 'short_break';
       setMode(nextMode);
@@ -81,18 +82,14 @@ export const FocusTimer = () => {
       setTimeLeft(TIMER_PRESETS.focus.duration * 60);
       toast.info('Break complete! Ready to focus?');
     }
-  }, [mode, currentSession, sessionsCompleted, api, fetchStats, refreshUser, soundEnabled, customDuration]);
+  }, [mode, currentSession, sessionsCompleted, api, refetchStats, refreshUser, soundEnabled, customDuration]);
 
   useEffect(() => {
-    const controller = new AbortController();
-    fetchStats(controller.signal);
-    // Create audio elements
     audioRef.current = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
-    ambientRef.current = new Audio('https://assets.mixkit.co/active_storage/sfx/125/125-preview.mp3'); // Example rain/ambient loop
+    ambientRef.current = new Audio('https://assets.mixkit.co/active_storage/sfx/125/125-preview.mp3');
     ambientRef.current.loop = true;
     ambientRef.current.volume = 0.4;
-    return () => controller.abort();
-  }, [fetchStats]);
+  }, []);
 
   useEffect(() => {
     if (ambientPlaying && isRunning) {
@@ -215,6 +212,41 @@ export const FocusTimer = () => {
   const totalDurationSeconds = mode === 'focus' && customDuration !== config.duration ? customDuration * 60 : config.duration * 60;
   const progress = ((totalDurationSeconds - timeLeft) / totalDurationSeconds) * 100;
   const Icon = config.icon;
+
+  if (!stats && loading) {
+    return (
+      <div className="space-y-4 animate-in fade-in duration-300">
+        <div className="flex flex-col lg:flex-row gap-4 items-start">
+          <div className="w-full lg:flex-1">
+            <div className="rounded-2xl bg-card shadow-neu-sm p-10 h-[400px] flex flex-col items-center justify-center space-y-6">
+               <div className="w-48 h-8 rounded-lg bg-primary/10 animate-pulse" />
+               <div className="w-48 h-48 rounded-full bg-primary/5 animate-pulse" />
+               <div className="w-64 h-12 rounded-xl bg-primary/10 animate-pulse" />
+            </div>
+          </div>
+          <div className="w-full lg:w-80 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-3">
+            {[0, 1, 2, 3].map(i => (
+              <div key={i} className="rounded-2xl bg-card shadow-neu-sm p-6 space-y-2">
+                <div className="h-4 w-24 rounded-md bg-primary/10 animate-pulse" />
+                <div className="h-6 w-16 rounded-lg bg-primary/10 animate-pulse" />
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="rounded-2xl bg-card shadow-neu-sm p-6 space-y-4">
+          <div className="h-6 w-64 rounded-lg bg-primary/10 animate-pulse" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {[0, 1, 2, 3].map(i => (
+               <div key={i} className="flex gap-3">
+                 <div className="h-6 w-6 rounded-full bg-primary/10 animate-pulse shrink-0" />
+                 <div className="h-4 flex-1 rounded-md bg-primary/5 animate-pulse" />
+               </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4" data-testid="focus-page">

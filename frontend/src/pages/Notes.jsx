@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useDataCache, useCachedFetch } from '../contexts/DataCacheContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -433,22 +434,21 @@ export const Notes = () => {
     };
   }, [editor]);
 
-  const fetchNotes = useCallback(async (signal) => {
-    try {
-      const response = await api.get('/notes', { signal });
-      setNotes(response.data);
-    } catch (error) {
-      if (!signal?.aborted) toast.error('Failed to fetch notes');
-    } finally {
-      setLoading(false);
-    }
+  const { invalidate: invalidateCache } = useDataCache();
+
+  const [cachedNotes, cacheLoading, refetchNotes] = useCachedFetch('notes', async (signal) => {
+    const response = await api.get('/notes', { signal });
+    return response.data;
   }, [api]);
 
   useEffect(() => {
-    const controller = new AbortController();
-    fetchNotes(controller.signal);
-    return () => controller.abort();
-  }, [fetchNotes]);
+    if (cachedNotes) {
+      setNotes(cachedNotes);
+      setLoading(false);
+    } else if (!cacheLoading) {
+      setLoading(false);
+    }
+  }, [cachedNotes, cacheLoading]);
 
   // Tree Building Logic
   const noteTree = useMemo(() => {
@@ -618,7 +618,34 @@ export const Notes = () => {
     setSelectedNoteId(null);
   };
 
-  if (loading) return <div className="flex justify-center mt-20"><div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" /></div>;
+  if (loading) return (
+    <div className="h-[calc(100vh-2rem)] flex flex-col animate-in fade-in duration-300">
+      <div className="flex-1 rounded-t-xl overflow-hidden bg-card/10 backdrop-blur-sm shadow-neu">
+        <div className="h-full flex flex-col bg-background">
+          {/* Header Skeleton */}
+          <div className="px-6 py-5 flex items-center justify-between">
+            <div className="h-6 w-28 rounded-lg bg-primary/10 animate-pulse" />
+            <div className="h-8 w-24 rounded-xl bg-primary/10 animate-pulse" />
+          </div>
+          <div className="mx-0 h-px bg-gradient-to-r from-transparent via-muted-foreground/15 to-transparent" />
+          {/* Note List Skeleton */}
+          <div className="p-3 space-y-1">
+            {[0, 1, 2, 3, 4].map(i => (
+              <div key={i} className="flex items-center gap-2 py-2.5 px-3 rounded-2xl" style={{ animationDelay: `${i * 80}ms` }}>
+                <div className="w-4 h-4 rounded-md bg-primary/10 animate-pulse invisible" />
+                <div className="w-4 h-4 rounded-md bg-primary/10 animate-pulse" />
+                <div className="h-4 rounded-lg bg-primary/10 animate-pulse" style={{ width: `${35 + i * 12}%` }} />
+                <div className="ml-auto flex gap-1 opacity-50">
+                  <div className="w-6 h-6 rounded-lg bg-primary/5 animate-pulse" />
+                  <div className="w-6 h-6 rounded-lg bg-primary/5 animate-pulse" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div className="h-[calc(100dvh-6rem)] md:h-[calc(100vh-2rem)] flex flex-col" data-testid="notes-page">

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useDataCache, useCachedFetch } from '../contexts/DataCacheContext';
 import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -208,6 +209,7 @@ const TaskCard = ({ task, onClick, onColorUpdate, onDelete, onEdit, onReset, onT
 export const Tasks = () => {
   const { isSidebarCollapsed } = useOutletContext() || { isSidebarCollapsed: false };
   const { api } = useAuth();
+  const { invalidate: invalidateCache, setCached } = useDataCache();
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -234,36 +236,40 @@ export const Tasks = () => {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
-  const fetchTasks = useCallback(async (signal) => {
-    try {
-      const response = await api.get('/tasks', { signal });
-      // Keep position sorting for stability, but we removed drag
-      const tasksWithPos = response.data.map((t, i) => ({ ...t, position: t.position ?? i }));
-      setTasks(tasksWithPos.sort((a, b) => {
-        const pA = a.priority || 2;
-        const pB = b.priority || 2;
-        if (pA !== pB) return pB - pA;
-        if (a.due_date && b.due_date) {
-          return a.due_date.localeCompare(b.due_date);
-        } else if (a.due_date) {
-          return -1;
-        } else if (b.due_date) {
-          return 1;
-        }
-        return a.position - b.position;
-      }));
-    } catch (error) {
-      if (!signal?.aborted) toast.error('Failed to fetch tasks');
-    } finally {
-      setLoading(false);
-    }
+  const sortTasks = useCallback((tasksList) => {
+    const tasksWithPos = tasksList.map((t, i) => ({ ...t, position: t.position ?? i }));
+    return tasksWithPos.sort((a, b) => {
+      const pA = a.priority || 2;
+      const pB = b.priority || 2;
+      if (pA !== pB) return pB - pA;
+      if (a.due_date && b.due_date) {
+        return a.due_date.localeCompare(b.due_date);
+      } else if (a.due_date) {
+        return -1;
+      } else if (b.due_date) {
+        return 1;
+      }
+      return a.position - b.position;
+    });
+  }, []);
+
+  const [cachedTasks, cacheLoading, refetchTasks] = useCachedFetch('tasks', async (signal) => {
+    const response = await api.get('/tasks', { signal });
+    return response.data;
   }, [api]);
 
   useEffect(() => {
-    const controller = new AbortController();
-    fetchTasks(controller.signal);
-    return () => controller.abort();
-  }, [fetchTasks]);
+    if (cachedTasks) {
+      setTasks(sortTasks(cachedTasks));
+      setLoading(false);
+    }
+  }, [cachedTasks, sortTasks]);
+
+  useEffect(() => {
+    if (!cacheLoading && !cachedTasks) {
+      setLoading(false);
+    }
+  }, [cacheLoading, cachedTasks]);
 
   // --- Handlers for Quick Add & Basic Ops ---
 
@@ -431,7 +437,48 @@ export const Tasks = () => {
     }
   };
 
-  if (loading) return <div className="flex justify-center h-96"><div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin" /></div>;
+  if (loading) return (
+    <div className="space-y-6 w-full p-4 animate-in fade-in duration-300">
+      {/* Quick Add Skeleton */}
+      <div className="max-w-xl mx-auto w-full">
+        <div className="rounded-2xl bg-card shadow-neu-sm p-3 px-4 flex items-center gap-3">
+          <div className="w-5 h-5 rounded-full bg-primary/10 animate-pulse" />
+          <div className="h-4 w-40 rounded-lg bg-primary/10 animate-pulse" />
+        </div>
+      </div>
+      {/* Task Card Skeletons */}
+      <div className="max-w-xl mx-auto w-full space-y-4">
+        {[0, 1, 2].map(i => (
+          <div key={i} className="rounded-2xl bg-card shadow-neu-sm p-4 space-y-3" style={{ animationDelay: `${i * 100}ms` }}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3 flex-1">
+                <div className="w-5 h-5 rounded-md bg-primary/10 animate-pulse" />
+                <div className="h-4 rounded-lg bg-primary/10 animate-pulse" style={{ width: `${60 + i * 15}%` }} />
+              </div>
+              <div className="flex gap-2">
+                <div className="w-6 h-6 rounded-lg bg-primary/10 animate-pulse" />
+                <div className="w-6 h-6 rounded-lg bg-primary/10 animate-pulse" />
+              </div>
+            </div>
+            <div className="flex items-center gap-2 pl-8">
+              <div className="h-3 w-16 rounded-md bg-primary/5 animate-pulse" />
+              <div className="h-3 w-20 rounded-md bg-primary/5 animate-pulse" />
+            </div>
+            {i === 0 && (
+              <div className="pl-8 space-y-2 pt-1">
+                {[0, 1].map(j => (
+                  <div key={j} className="flex items-center gap-2">
+                    <div className="w-4 h-4 rounded-md bg-primary/10 animate-pulse" />
+                    <div className="h-3 rounded-md bg-primary/5 animate-pulse" style={{ width: `${40 + j * 20}%` }} />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 
   const quickAddColorClass = COLORS.find(c => c.id === quickColor)?.bg || 'bg-card';
 

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useCachedFetch } from '../contexts/DataCacheContext';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { Progress } from '../components/ui/progress';
@@ -30,25 +31,23 @@ const typeConfig = {
 
 export const Achievements = () => {
   const { api, user } = useAuth();
+
   const [achievements, setAchievements] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const controller = new AbortController();
-    const fetchAchievements = async () => {
-      try {
-        const response = await api.get('/achievements', { signal: controller.signal });
-        setAchievements(response.data);
-      } catch (error) {
-        if (!controller.signal.aborted) console.error('Failed to fetch achievements:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchAchievements();
-    return () => controller.abort();
+  const [cachedAchievements, cacheLoading] = useCachedFetch('achievements', async (signal) => {
+    const response = await api.get('/achievements', { signal });
+    return response.data;
   }, [api]);
+
+  useEffect(() => {
+    if (cachedAchievements) {
+      setAchievements(cachedAchievements);
+      setLoading(false);
+    } else if (!cacheLoading) {
+      setLoading(false);
+    }
+  }, [cachedAchievements, cacheLoading]);
 
   const unlockedCount = achievements.filter(a => a.unlocked).length;
   const totalXPEarned = achievements.filter(a => a.unlocked).reduce((sum, a) => sum + a.xp_reward, 0);
@@ -124,8 +123,46 @@ export const Achievements = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-96">
-        <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+      <div className="space-y-4 animate-in fade-in duration-300">
+        {/* Stat Cards Skeleton */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {[
+            'from-card to-amber-950/20',
+            'from-card to-violet-950/20',
+            'from-card to-emerald-950/20'
+          ].map((gradient, i) => (
+            <div key={i} className={`rounded-2xl bg-gradient-to-br ${gradient} shadow-neu-sm p-6`}>
+              <div className="flex items-center justify-between">
+                <div className="space-y-3">
+                  <div className="h-3 w-20 rounded-md bg-primary/10 animate-pulse" />
+                  <div className="h-9 w-24 rounded-lg bg-primary/10 animate-pulse" />
+                </div>
+                <div className="w-12 h-12 rounded-2xl bg-primary/10 animate-pulse" />
+              </div>
+            </div>
+          ))}
+        </div>
+        {/* Filter Bar Skeleton */}
+        <div className="flex gap-2 pt-2">
+          {[0, 1, 2].map(i => (
+            <div key={i} className="h-8 rounded-xl bg-primary/10 animate-pulse" style={{ width: `${60 + i * 10}px` }} />
+          ))}
+        </div>
+        {/* Achievement Grid Skeleton */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pt-2">
+          {[0, 1, 2, 3, 4, 5].map(i => (
+            <div key={i} className="rounded-2xl bg-card shadow-neu-sm p-5 space-y-3" style={{ animationDelay: `${i * 80}ms` }}>
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-primary/10 animate-pulse flex-shrink-0" />
+                <div className="flex-1 space-y-2 pt-1">
+                  <div className="h-4 w-3/4 rounded-md bg-primary/10 animate-pulse" />
+                  <div className="h-3 w-full rounded-md bg-primary/5 animate-pulse" />
+                </div>
+              </div>
+              <div className="h-2 w-full rounded-full bg-primary/5 animate-pulse" />
+            </div>
+          ))}
+        </div>
       </div>
     );
   }

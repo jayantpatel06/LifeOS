@@ -45,7 +45,6 @@ export const Settings = () => {
 
   const handleLogout = () => {
     logout();
-    navigate('/');
     toast.success('Logged out successfully');
   };
 
@@ -108,8 +107,56 @@ export const Settings = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-96">
-        <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+      <div className="space-y-4 animate-in fade-in duration-300">
+        {/* Profile Card Skeleton */}
+        <div className="rounded-2xl bg-card shadow-neu-sm overflow-hidden">
+          <div className="p-6 space-y-6">
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-5 h-5 rounded-md bg-primary/10 animate-pulse" />
+                <div className="h-5 w-24 rounded-md bg-primary/10 animate-pulse" />
+                <div className="h-3 w-32 rounded-md bg-primary/5 animate-pulse" />
+              </div>
+              <div className="h-8 w-24 rounded-xl bg-primary/10 animate-pulse" />
+            </div>
+            {/* Avatar + Info */}
+            <div className="flex items-center gap-4">
+              <div className="w-20 h-20 rounded-2xl bg-primary/10 animate-pulse" />
+              <div className="space-y-2">
+                <div className="h-6 w-40 rounded-lg bg-primary/10 animate-pulse" />
+                <div className="h-4 w-52 rounded-md bg-primary/5 animate-pulse" />
+              </div>
+            </div>
+            {/* Contribution Grid Placeholder */}
+            <div className="space-y-3 pt-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="h-7 w-12 rounded-md bg-primary/10 animate-pulse" />
+                  <div className="h-4 w-48 rounded-md bg-primary/5 animate-pulse" />
+                </div>
+                <div className="flex gap-4">
+                  <div className="h-4 w-24 rounded-md bg-primary/5 animate-pulse" />
+                  <div className="h-4 w-24 rounded-md bg-primary/5 animate-pulse" />
+                </div>
+              </div>
+              <div className="h-[100px] w-full rounded-xl bg-primary/5 animate-pulse" />
+            </div>
+          </div>
+        </div>
+        {/* Focus Settings Card Skeleton */}
+        <div className="rounded-2xl bg-card shadow-neu-sm p-6 space-y-4">
+          <div className="flex items-center gap-2">
+            <div className="w-5 h-5 rounded-md bg-primary/10 animate-pulse" />
+            <div className="h-5 w-32 rounded-md bg-primary/10 animate-pulse" />
+          </div>
+          {[0, 1, 2].map(i => (
+            <div key={i} className="flex items-center justify-between py-2">
+              <div className="h-4 w-36 rounded-md bg-primary/5 animate-pulse" />
+              <div className="h-8 w-20 rounded-xl bg-primary/10 animate-pulse" />
+            </div>
+          ))}
+        </div>
       </div>
     );
   }

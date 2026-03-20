@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useDataCache, useCachedFetch } from '../contexts/DataCacheContext';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
@@ -14,6 +15,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 export const Budget = () => {
   const { api } = useAuth();
+  const { invalidate: invalidateCache } = useDataCache();
   const [sheets, setSheets] = useState([]);
   const [activeSheetId, setActiveSheetId] = useState(null);
   const [rows, setRows] = useState([]);
@@ -32,22 +34,25 @@ export const Budget = () => {
   const [filterEndDate, setFilterEndDate] = useState('');
   const csvInputRef = useRef(null);
 
-  // Fetch sheets
-  const fetchSheets = useCallback(async (signal) => {
-    try {
-      const res = await api.get('/budget/sheets', { signal });
-      setSheets(res.data);
-      if (res.data.length > 0 && !activeSheetId) {
-        setActiveSheetId(res.data[0].id);
+  // Fetch sheets (cached)
+  const [cachedSheets, cacheLoading] = useCachedFetch('budget_sheets', async (signal) => {
+    const res = await api.get('/budget/sheets', { signal });
+    return res.data;
+  }, [api]);
+
+  useEffect(() => {
+    if (cachedSheets) {
+      setSheets(cachedSheets);
+      if (cachedSheets.length > 0 && !activeSheetId) {
+        setActiveSheetId(cachedSheets[0].id);
       }
-    } catch (error) {
-      if (!signal?.aborted) toast.error('Failed to load sheets');
-    } finally {
+      setLoading(false);
+    } else if (!cacheLoading) {
       setLoading(false);
     }
-  }, [api, activeSheetId]);
+  }, [cachedSheets, cacheLoading, activeSheetId]);
 
-  // Fetch rows for active sheet
+  // Fetch rows for active sheet (not cached — sheet-specific)
   const fetchRows = useCallback(async (signal) => {
     if (!activeSheetId) { setRows([]); return; }
     try {
@@ -58,11 +63,6 @@ export const Budget = () => {
     }
   }, [api, activeSheetId]);
 
-  useEffect(() => {
-    const controller = new AbortController();
-    fetchSheets(controller.signal);
-    return () => controller.abort();
-  }, [fetchSheets]);
   useEffect(() => {
     const controller = new AbortController();
     fetchRows(controller.signal);
@@ -268,8 +268,40 @@ export const Budget = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-96">
-        <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+      <div className="flex flex-col h-[calc(100vh-2rem)] animate-in fade-in duration-300">
+        {/* Tab Bar Skeleton */}
+        <div className="flex items-center justify-between px-1 pb-2">
+          <div className="flex items-center gap-1">
+            {[0, 1, 2].map(i => (
+              <div key={i} className="h-9 rounded-2xl bg-primary/10 animate-pulse" style={{ width: `${70 + i * 15}px` }} />
+            ))}
+            <div className="w-8 h-8 rounded-full bg-primary/10 animate-pulse ml-1" />
+          </div>
+          <div className="flex gap-2">
+            <div className="h-8 w-20 rounded-xl bg-primary/10 animate-pulse" />
+            <div className="h-8 w-20 rounded-xl bg-primary/10 animate-pulse" />
+          </div>
+        </div>
+        {/* Table Skeleton */}
+        <div className="flex-1 rounded-2xl bg-card shadow-neu-sm overflow-hidden">
+          {/* Header */}
+          <div className="flex items-center gap-2 p-3 border-b border-border/50 bg-muted/20">
+            {[60, 100, 80, 80, 80, 80].map((w, i) => (
+              <div key={i} className="h-4 rounded-md bg-primary/10 animate-pulse" style={{ width: `${w}px` }} />
+            ))}
+          </div>
+          {/* Rows */}
+          {[0, 1, 2, 3, 4, 5].map(i => (
+            <div key={i} className="flex items-center gap-2 p-3 border-b border-border/20" style={{ animationDelay: `${i * 60}ms` }}>
+              <div className="h-4 w-14 rounded-md bg-primary/5 animate-pulse" />
+              <div className="h-4 flex-1 rounded-md bg-primary/10 animate-pulse" style={{ maxWidth: `${120 + i * 30}px` }} />
+              <div className="h-4 w-16 rounded-md bg-primary/5 animate-pulse" />
+              <div className="h-4 w-16 rounded-md bg-primary/5 animate-pulse" />
+              <div className="h-4 w-16 rounded-md bg-primary/5 animate-pulse" />
+              <div className="h-4 w-16 rounded-md bg-primary/5 animate-pulse" />
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
