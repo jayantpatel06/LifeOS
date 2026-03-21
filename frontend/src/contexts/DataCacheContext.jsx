@@ -6,7 +6,7 @@ const DataCacheContext = createContext(null);
 const STALE_MS = 30_000; // Data older than 30s is considered stale
 
 export const DataCacheProvider = ({ children }) => {
-  const { api, isAuthenticated, user } = useAuth();
+  const { api, isAuthenticated, token, user } = useAuth();
   const cacheRef = useRef({});  // { [key]: { data, timestamp } }
   // Subscribers: page components register to get notified of cache updates for their key
   const subscribersRef = useRef(new Map()); // Map<key, Set<callback>>
@@ -178,7 +178,7 @@ export const DataCacheProvider = ({ children }) => {
   // Auto-prefetch when user becomes authenticated, and sync every 60 seconds
   useEffect(() => {
     let interval;
-    if (isAuthenticated) {
+    if (isAuthenticated && token) {
       // Fetch immediately on auth (if not already loaded from localStorage, or just to get fresh data)
       prefetchAll();
       
@@ -194,7 +194,7 @@ export const DataCacheProvider = ({ children }) => {
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [isAuthenticated, prefetchAll, clearAll]);
+  }, [isAuthenticated, token, prefetchAll, clearAll]);
 
   // Stable context value — never changes reference, prevents consumer re-renders
   const value = useMemo(() => ({

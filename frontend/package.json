@@ -53,7 +53,9 @@
     "zod": "^3.24.4"
   },
   "scripts": {
+    "prestart": "node scripts/generate-seo-assets.js",
     "start": "set HOST=0.0.0.0&& craco start",
+    "prebuild": "node scripts/generate-seo-assets.js",
     "build": "craco build",
     "test": "craco test"
   },

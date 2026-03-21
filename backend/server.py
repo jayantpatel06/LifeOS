@@ -57,7 +57,7 @@ limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 api_router = APIRouter(prefix="/api")
-security = HTTPBearer()
+security = HTTPBearer(auto_error=False)
 
 # Health check endpoint (responds immediately for Render/deployment health checks)
 @app.get("/")
@@ -293,8 +293,10 @@ def create_token(user_id: str, email: str) -> str:
     }
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+async def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)):
     try:
+        if credentials is None:
+            raise HTTPException(status_code=401, detail="Not authenticated")
         token = credentials.credentials
         payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
         user_id = payload.get("sub")

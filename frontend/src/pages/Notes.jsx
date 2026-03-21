@@ -18,7 +18,6 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import { cn } from '../lib/utils';
 import { useRef } from 'react';
 import StarterKit from '@tiptap/starter-kit';
-import Link from '@tiptap/extension-link';
 import Image from '@tiptap/extension-image';
 import Youtube from '@tiptap/extension-youtube';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -335,8 +334,16 @@ export const Notes = () => {
   // Editor State
   const editor = useEditor({
     extensions: [
-      StarterKit,
-      Link.configure({ openOnClick: false, HTMLAttributes: { target: '_blank', rel: 'noopener noreferrer', class: 'text-primary underline cursor-pointer hover:text-primary/80' } }),
+      StarterKit.configure({
+        link: {
+          openOnClick: false,
+          HTMLAttributes: {
+            target: '_blank',
+            rel: 'noopener noreferrer',
+            class: 'text-primary underline cursor-pointer hover:text-primary/80',
+          },
+        },
+      }),
       Image.configure({
         inline: true,
         HTMLAttributes: {

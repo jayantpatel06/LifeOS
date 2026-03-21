@@ -6,7 +6,7 @@ import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover';
 import { toast } from 'sonner';
@@ -648,7 +648,12 @@ export const Tasks = () => {
       {/* Edit Dialog */}
       < Dialog open={dialogOpen} onOpenChange={setDialogOpen} >
         <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader><DialogTitle>Edit List</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>Edit List</DialogTitle>
+            <DialogDescription>
+              Update the list title, due date, priority, and checklist items.
+            </DialogDescription>
+          </DialogHeader>
           <form onSubmit={handleUpdate} className="space-y-4 mt-2">
             <Input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} placeholder="Title" className="text-xl font-semibold border-none px-0 shadow-none focus-visible:ring-0" required />
 

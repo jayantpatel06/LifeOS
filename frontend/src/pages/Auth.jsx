@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../co
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../components/ui/dialog';
 import { toast } from 'sonner';
-import { Zap, CheckSquare, FileText, Wallet, Timer, Flame, ArrowRight, Shield, Sparkles, BarChart3, Brain, Target, Trophy, ChevronDown, Star, User, Lock, Mail } from 'lucide-react';
+import { Zap, CheckSquare, FileText, Wallet, Timer, Flame, ArrowRight, Shield, Sparkles, BarChart3, Brain, Target, Trophy, ChevronDown, Star, User, Lock, Mail, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { z } from 'zod';
 import Lenis from 'lenis';
@@ -32,11 +32,12 @@ export const Auth = () => {
   const [registerPassword, setRegisterPassword] = useState('');
   const [registerUsername, setRegisterUsername] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showConnectionHint, setShowConnectionHint] = useState(false);
   const [errors, setErrors] = useState({});
   const [authOpen, setAuthOpen] = useState(false);
   const [authTab, setAuthTab] = useState('login');
 
-  const { login, register } = useAuth();
+  const { login, register, backendStatus } = useAuth();
   const navigate = useNavigate();
   const scrollContainerRef = useRef(null);
   const lenisRef = useRef(null);
@@ -64,6 +65,19 @@ export const Auth = () => {
       lenisRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    if (!loading) {
+      setShowConnectionHint(false);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setShowConnectionHint(true);
+    }, 1200);
+
+    return () => clearTimeout(timer);
+  }, [loading]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -129,6 +143,27 @@ export const Auth = () => {
   };
 
   const openAuth = () => setAuthOpen(true);
+  const showWarmupNotice = backendStatus === 'warming' && !loading;
+  const showInlineConnectionNotice = showWarmupNotice || showConnectionHint;
+
+  const renderConnectionNotice = () => {
+    if (!showInlineConnectionNotice) {
+      return null;
+    }
+
+    const message = loading
+      ? 'Wait for a moment while we are connecting. The server may be waking up.'
+      : 'Connecting to the server in the background. Sign in may take a little longer the first time.';
+
+    return (
+      <div className="flex items-start gap-3 rounded-2xl border border-violet-500/20 bg-violet-500/10 px-4 py-3 text-left">
+        <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-violet-300" />
+        <p className="text-xs leading-relaxed text-violet-100">
+          {message}
+        </p>
+      </div>
+    );
+  };
 
   const detailedFeatures = [
     {
@@ -492,6 +527,14 @@ export const Auth = () => {
       {/* Auth Dialog */}
       <Dialog open={authOpen} onOpenChange={(open) => { setAuthOpen(open); if (!open) setAuthTab('login'); }}>
         <DialogContent className="max-w-[880px] w-full md:h-auto h-screen border-0 shadow-2xl p-0 pt-12 md:pt-0 gap-0 bg-slate-950 rounded-2xl overflow-y-auto md:overflow-hidden flex flex-col justify-center md:justify-start mt-6 md:mt-0">
+          <DialogHeader className="sr-only">
+            <DialogTitle>{authTab === 'login' ? 'Sign in to LifeOS' : 'Create a LifeOS account'}</DialogTitle>
+            <DialogDescription>
+              {authTab === 'login'
+                ? 'Sign in to access your LifeOS workspace.'
+                : 'Create a new account to start using LifeOS.'}
+            </DialogDescription>
+          </DialogHeader>
           <motion.div
             initial={{ opacity: 0, scale: 0.95, y: 10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -556,6 +599,7 @@ export const Auth = () => {
                       >
                         {loading ? 'Signing in...' : 'Sign in'}
                       </Button>
+                      {renderConnectionNotice()}
                     </form>
                     <p className="text-center text-sm text-gray-400 mt-6">
                       Don't have an account?{' '}
@@ -622,6 +666,7 @@ export const Auth = () => {
                       >
                         {loading ? 'Creating account...' : 'Create account'}
                       </Button>
+                      {renderConnectionNotice()}
                     </form>
                     <p className="text-center text-sm text-gray-400 mt-6">
                       Already have an account?{' '}

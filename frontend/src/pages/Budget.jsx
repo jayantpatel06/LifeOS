@@ -3,7 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useDataCache, useCachedFetch } from '../contexts/DataCacheContext';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../components/ui/dropdown-menu';
 import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover';
 import { toast } from 'sonner';
@@ -567,7 +567,12 @@ export const Budget = () => {
       {/* New Sheet Dialog */}
       <Dialog open={newSheetDialog} onOpenChange={setNewSheetDialog}>
         <DialogContent className="sm:max-w-[400px]">
-          <DialogHeader><DialogTitle>Create New Sheet</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>Create New Sheet</DialogTitle>
+            <DialogDescription>
+              Create a new budget sheet to track a separate account, month, or category.
+            </DialogDescription>
+          </DialogHeader>
           <div className="space-y-4 pt-2">
             <Input value={newSheetName} onChange={e => setNewSheetName(e.target.value)}
               placeholder="Sheet name..." autoFocus onKeyDown={e => e.key === 'Enter' && createSheet()} />
@@ -583,7 +588,12 @@ export const Budget = () => {
       {/* Rename Dialog */}
       <Dialog open={!!renameDialog} onOpenChange={open => !open && setRenameDialog(null)}>
         <DialogContent className="sm:max-w-[400px]">
-          <DialogHeader><DialogTitle>Rename Sheet</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>Rename Sheet</DialogTitle>
+            <DialogDescription>
+              Change the sheet name without affecting any existing rows.
+            </DialogDescription>
+          </DialogHeader>
           <div className="space-y-4 pt-2">
             <Input value={renameName} onChange={e => setRenameName(e.target.value)}
               autoFocus onKeyDown={e => e.key === 'Enter' && renameSheet()} />
@@ -598,10 +608,12 @@ export const Budget = () => {
       {/* Delete Sheet Confirmation */}
       <Dialog open={!!deleteConfirm} onOpenChange={open => !open && setDeleteConfirm(null)}>
         <DialogContent className="sm:max-w-[400px]">
-          <DialogHeader><DialogTitle>Delete Sheet</DialogTitle></DialogHeader>
-          <p className="text-sm text-muted-foreground py-2">
-            Delete <strong>"{deleteConfirm?.name}"</strong> and all its rows? This can't be undone.
-          </p>
+          <DialogHeader>
+            <DialogTitle>Delete Sheet</DialogTitle>
+            <DialogDescription>
+              Delete <strong>"{deleteConfirm?.name}"</strong> and all its rows? This can't be undone.
+            </DialogDescription>
+          </DialogHeader>
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setDeleteConfirm(null)}>Cancel</Button>
             <Button variant="destructive" onClick={deleteSheet} className="bg-red-600 hover:bg-red-700">Delete</Button>

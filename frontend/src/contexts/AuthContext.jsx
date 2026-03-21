@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
 
 const AuthContext = createContext(null);
@@ -6,11 +6,17 @@ const AuthContext = createContext(null);
 const API = process.env.REACT_APP_BACKEND_URL
   ? `${process.env.REACT_APP_BACKEND_URL}/api`
   : '/api';
+const HEALTHCHECK_URL = process.env.REACT_APP_BACKEND_URL
+  ? `${process.env.REACT_APP_BACKEND_URL}/health`
+  : '/health';
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(localStorage.getItem('lifeos_token'));
   const [loading, setLoading] = useState(true);
+  const [backendStatus, setBackendStatus] = useState('idle');
+  const backendStatusRef = useRef('idle');
+  const warmupPromiseRef = useRef(null);
 
   // Create stable API instance
   const [api] = useState(() => axios.create({
@@ -18,14 +24,58 @@ export const AuthProvider = ({ children }) => {
     headers: token ? { Authorization: `Bearer ${token}` } : {}
   }));
 
-  // Update axios headers when token changes
-  useEffect(() => {
-    if (token) {
-      api.defaults.headers.Authorization = `Bearer ${token}`;
+  const applyTokenToApi = useCallback((nextToken) => {
+    if (nextToken) {
+      api.defaults.headers.Authorization = `Bearer ${nextToken}`;
     } else {
       delete api.defaults.headers.Authorization;
     }
-  }, [token, api]);
+  }, [api]);
+
+  // Update axios headers when token changes
+  useEffect(() => {
+    applyTokenToApi(token);
+  }, [token, applyTokenToApi]);
+
+  useEffect(() => {
+    backendStatusRef.current = backendStatus;
+  }, [backendStatus]);
+
+  const warmBackend = useCallback(() => {
+    if (warmupPromiseRef.current) {
+      return warmupPromiseRef.current;
+    }
+
+    if (backendStatusRef.current === 'ready') {
+      return Promise.resolve(true);
+    }
+
+    backendStatusRef.current = 'warming';
+    setBackendStatus('warming');
+
+    const warmupRequest = axios
+      .get(HEALTHCHECK_URL, { timeout: 65000 })
+      .then(() => {
+        backendStatusRef.current = 'ready';
+        setBackendStatus('ready');
+        return true;
+      })
+      .catch(() => {
+        backendStatusRef.current = 'error';
+        setBackendStatus('error');
+        return false;
+      })
+      .finally(() => {
+        warmupPromiseRef.current = null;
+      });
+
+    warmupPromiseRef.current = warmupRequest;
+    return warmupRequest;
+  }, []);
+
+  useEffect(() => {
+    warmBackend();
+  }, [warmBackend]);
 
   // 401 interceptor — logout on expired/invalid token
   useEffect(() => {
@@ -52,6 +102,7 @@ export const AuthProvider = ({ children }) => {
         const response = await api.post('/auth/refresh');
         const { access_token, user: userData } = response.data;
         localStorage.setItem('lifeos_token', access_token);
+        applyTokenToApi(access_token);
         setToken(access_token);
         setUser(userData);
       } catch (e) {
@@ -59,7 +110,7 @@ export const AuthProvider = ({ children }) => {
       }
     }, REFRESH_INTERVAL);
     return () => clearInterval(interval);
-  }, [token, api]);
+  }, [token, api, applyTokenToApi]);
 
   const fetchUser = useCallback(async () => {
     if (!token) {
@@ -90,25 +141,28 @@ export const AuthProvider = ({ children }) => {
     const response = await axios.post(`${API}/auth/login`, { email, password });
     const { access_token, user: userData } = response.data;
     localStorage.setItem('lifeos_token', access_token);
+    applyTokenToApi(access_token);
     setToken(access_token);
     setUser(userData);
     return userData;
-  }, []);
+  }, [applyTokenToApi]);
 
   const register = useCallback(async (email, password, username) => {
     const response = await axios.post(`${API}/auth/register`, { email, password, username });
     const { access_token, user: userData } = response.data;
     localStorage.setItem('lifeos_token', access_token);
+    applyTokenToApi(access_token);
     setToken(access_token);
     setUser(userData);
     return userData;
-  }, []);
+  }, [applyTokenToApi]);
 
   const logout = useCallback(() => {
     localStorage.removeItem('lifeos_token');
+    applyTokenToApi(null);
     setToken(null);
     setUser(null);
-  }, []);
+  }, [applyTokenToApi]);
 
   const refreshUser = useCallback(async () => {
     await fetchUser();
@@ -118,10 +172,12 @@ export const AuthProvider = ({ children }) => {
     user,
     token,
     loading,
+    backendStatus,
     login,
     register,
     logout,
     refreshUser,
+    warmBackend,
     api,
     isAuthenticated: !!user
   };

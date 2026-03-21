@@ -61,6 +61,8 @@ const ROUTE_SEO = {
   },
 };
 
+const STRUCTURED_DATA_SELECTOR = "script[data-seo-jsonld]";
+
 const ensureMetaTag = (selector, attribute, value) => {
   let tag = document.head.querySelector(selector);
 
@@ -90,12 +92,47 @@ const setCanonicalLink = (href) => {
   link.setAttribute("href", href);
 };
 
+const clearStructuredData = () => {
+  document.head.querySelectorAll(STRUCTURED_DATA_SELECTOR).forEach((script) => {
+    script.remove();
+  });
+};
+
+const setStructuredData = (documents) => {
+  clearStructuredData();
+
+  documents.forEach((documentData, index) => {
+    const script = document.createElement("script");
+    script.setAttribute("type", "application/ld+json");
+    script.setAttribute("data-seo-jsonld", `${index}`);
+    script.textContent = JSON.stringify(documentData);
+    document.head.appendChild(script);
+  });
+};
+
+const normalizeSiteUrl = (value) => {
+  const fallbackOrigin =
+    typeof window !== "undefined" ? window.location.origin : "http://localhost:3000";
+
+  try {
+    const url = new URL(value || fallbackOrigin);
+    const pathname = url.pathname === "/" ? "" : url.pathname.replace(/\/+$/, "");
+    return `${url.origin}${pathname}`;
+  } catch {
+    return fallbackOrigin;
+  }
+};
+
 const toAbsoluteUrl = (path) => {
-  if (/^https?:\/\//i.test(path)) {
+  if (/^https?:\/\//i.test(path || "")) {
     return path;
   }
 
-  return new URL(path.replace(/^\/+/, ""), `${window.location.origin}/`).toString();
+  const siteUrl = normalizeSiteUrl(process.env.REACT_APP_SITE_URL);
+  const baseUrl = `${siteUrl.replace(/\/+$/, "")}/`;
+  const cleanPath = path === "/" ? "" : (path || "").replace(/^\/+/, "");
+
+  return new URL(cleanPath, baseUrl).toString();
 };
 
 export const RouteSeo = () => {
@@ -110,7 +147,35 @@ export const RouteSeo = () => {
     const type = seo.type ?? DEFAULT_SEO.type;
     const image = toAbsoluteUrl(seo.image ?? DEFAULT_SEO.image);
     const imageAlt = seo.imageAlt ?? DEFAULT_SEO.imageAlt;
-    const canonicalUrl = `${window.location.origin}${location.pathname}`;
+    const canonicalUrl = toAbsoluteUrl(location.pathname);
+    const structuredData =
+      location.pathname === "/"
+        ? [
+            {
+              "@context": "https://schema.org",
+              "@type": "WebSite",
+              description,
+              inLanguage: "en",
+              name: DEFAULT_SEO.siteName,
+              url: toAbsoluteUrl("/"),
+            },
+            {
+              "@context": "https://schema.org",
+              "@type": "SoftwareApplication",
+              applicationCategory: "ProductivityApplication",
+              description,
+              image,
+              name: DEFAULT_SEO.siteName,
+              offers: {
+                "@type": "Offer",
+                price: "0",
+                priceCurrency: "USD",
+              },
+              operatingSystem: "Web",
+              url: toAbsoluteUrl("/"),
+            },
+          ]
+        : [];
 
     document.title = title;
 
@@ -118,6 +183,8 @@ export const RouteSeo = () => {
     setMetaContent('meta[name="keywords"]', "name", "keywords", keywords);
     setMetaContent('meta[name="author"]', "name", "author", DEFAULT_SEO.author);
     setMetaContent('meta[name="robots"]', "name", "robots", robots);
+    setMetaContent('meta[name="googlebot"]', "name", "googlebot", robots);
+    setMetaContent('meta[name="bingbot"]', "name", "bingbot", robots);
     setMetaContent('meta[name="theme-color"]', "name", "theme-color", DEFAULT_SEO.themeColor);
     setMetaContent(
       'meta[name="application-name"]',
@@ -132,6 +199,7 @@ export const RouteSeo = () => {
       DEFAULT_SEO.siteName,
     );
     setMetaContent('meta[property="og:type"]', "property", "og:type", type);
+    setMetaContent('meta[property="og:locale"]', "property", "og:locale", "en_US");
     setMetaContent(
       'meta[property="og:site_name"]',
       "property",
@@ -151,9 +219,15 @@ export const RouteSeo = () => {
     setMetaContent('meta[name="twitter:card"]', "name", "twitter:card", "summary_large_image");
     setMetaContent('meta[name="twitter:title"]', "name", "twitter:title", title);
     setMetaContent('meta[name="twitter:description"]', "name", "twitter:description", description);
+    setMetaContent('meta[name="twitter:url"]', "name", "twitter:url", canonicalUrl);
     setMetaContent('meta[name="twitter:image"]', "name", "twitter:image", image);
     setMetaContent('meta[name="twitter:image:alt"]', "name", "twitter:image:alt", imageAlt);
     setCanonicalLink(canonicalUrl);
+    setStructuredData(structuredData);
+
+    return () => {
+      clearStructuredData();
+    };
   }, [location.pathname]);
 
   return null;
