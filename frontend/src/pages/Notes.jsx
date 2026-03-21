@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { useDataCache, useCachedFetch } from '../contexts/DataCacheContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -275,7 +274,13 @@ export const Notes = () => {
     extensions: [
       StarterKit,
       Link.configure({ openOnClick: false, HTMLAttributes: { target: '_blank', rel: 'noopener noreferrer', class: 'text-primary underline cursor-pointer hover:text-primary/80' } }),
-      Image.configure({ inline: true }),
+      Image.configure({
+        inline: true,
+        HTMLAttributes: {
+          loading: 'lazy',
+          decoding: 'async',
+        },
+      }),
       Youtube.configure({width: 450, height: 270, controls: true }),
       Instagram.configure({ width: 280, height: 400 }),
       Mention.configure({
@@ -434,21 +439,22 @@ export const Notes = () => {
     };
   }, [editor]);
 
-  const { invalidate: invalidateCache } = useDataCache();
-
-  const [cachedNotes, cacheLoading, refetchNotes] = useCachedFetch('notes', async (signal) => {
-    const response = await api.get('/notes', { signal });
-    return response.data;
+  // Direct API fetch (removed DataCacheContext to prevent content overwrite)
+  const fetchNotes = useCallback(async () => {
+    try {
+      const response = await api.get('/notes');
+      setNotes(response.data);
+    } catch (error) {
+      console.error('Failed to fetch notes:', error);
+      toast.error('Failed to load notes');
+    } finally {
+      setLoading(false);
+    }
   }, [api]);
 
   useEffect(() => {
-    if (cachedNotes) {
-      setNotes(cachedNotes);
-      setLoading(false);
-    } else if (!cacheLoading) {
-      setLoading(false);
-    }
-  }, [cachedNotes, cacheLoading]);
+    fetchNotes();
+  }, [fetchNotes]);
 
   // Tree Building Logic
   const noteTree = useMemo(() => {

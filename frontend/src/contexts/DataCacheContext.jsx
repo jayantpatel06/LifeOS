@@ -34,7 +34,7 @@ export const DataCacheProvider = ({ children }) => {
         console.error('Failed to load cache from localStorage', e);
       }
     }
-  }, [getStorageKey]);
+  }, [getStorageKey, notifyKey]);
 
   // Subscribe to cache updates for a specific key
   const subscribe = useCallback((key, callback) => {

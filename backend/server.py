@@ -59,6 +59,15 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 api_router = APIRouter(prefix="/api")
 security = HTTPBearer()
 
+# Health check endpoint (responds immediately for Render/deployment health checks)
+@app.get("/")
+async def health_check():
+    return {"status": "ok", "service": "LifeOS API"}
+
+@app.get("/health")
+async def health():
+    return {"status": "healthy"}
+
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -1469,3 +1478,9 @@ async def startup_db_client():
 async def shutdown_db_client():
     client.close()
     logger.info("🔌 MongoDB connection closed")
+
+# Startup for local development and production
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run("server:app", host="0.0.0.0", port=port, reload=False)
