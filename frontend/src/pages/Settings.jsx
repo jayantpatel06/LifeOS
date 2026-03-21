@@ -33,8 +33,10 @@ export const Settings = () => {
         setStats(statsRes.data);
         setActivityData(activityRes.data);
         refreshUser();
-      } catch (error) {
-        if (!controller.signal.aborted) console.error('Failed to fetch settings data:', error);
+      } catch {
+        if (!controller.signal.aborted) {
+          toast.error('Failed to load settings data');
+        }
       } finally {
         setLoading(false);
       }

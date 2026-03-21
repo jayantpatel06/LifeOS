@@ -1,6 +1,7 @@
 {
     "short_name": "LifeOS",
     "name": "LifeOS - Life Manager",
+    "description": "LifeOS is a gamified productivity workspace for tasks, notes, budgets, and focus sessions.",
     "icons": [
         {
             "src": "favicon.ico",

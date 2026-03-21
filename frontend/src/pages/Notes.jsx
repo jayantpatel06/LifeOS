@@ -3,6 +3,14 @@ import { useAuth } from '../contexts/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../components/ui/dialog';
 import { ScrollArea } from '../components/ui/scroll-area';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -28,7 +36,30 @@ import {
 // --- Editor Toolbar (Reused) ---
 const EditorToolbar = ({ editor, onBack }) => {
   const { api } = useAuth();
+  const [isLinkDialogOpen, setIsLinkDialogOpen] = useState(false);
+  const [linkUrl, setLinkUrl] = useState('');
   if (!editor) return null;
+
+  const handleOpenLinkDialog = () => {
+    setLinkUrl(editor.getAttributes('link').href || '');
+    setIsLinkDialogOpen(true);
+  };
+
+  const handleCloseLinkDialog = (open) => {
+    setIsLinkDialogOpen(open);
+    if (!open) {
+      setLinkUrl('');
+    }
+  };
+
+  const handleLinkSubmit = (e) => {
+    e.preventDefault();
+    const url = linkUrl.trim();
+    if (!url) return;
+
+    editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run();
+    handleCloseLinkDialog(false);
+  };
 
   const handleImageUpload = async (e) => {
     const file = e.target.files?.[0];
@@ -55,8 +86,7 @@ const EditorToolbar = ({ editor, onBack }) => {
           title: res.data.fullImageId || ''
         });
         toast.success('Image uploaded', { id: toastId });
-      } catch (error) {
-        console.error("Upload failed", error);
+      } catch {
         toast.error('Failed to upload image', { id: toastId });
       }
     }
@@ -77,52 +107,83 @@ const EditorToolbar = ({ editor, onBack }) => {
   );
 
   return (
-    <div className="bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 p-1 pl-5 flex flex-wrap gap-1 sticky top-0 z-10 items-center shadow-neu-inset-sm rounded-b-xl">
-      <Button
-        variant="ghost"
-        size="icon"
-        onClick={onBack}
-        className="h-8 w-8 mr-1 text-muted-foreground hover:text-foreground"
-        title="Back to Notes"
-      >
-        <ArrowLeft className="w-4 h-4" />
-      </Button>
-      <div className="w-px h-5 bg-muted-foreground/15 rounded-full mx-1 self-center" />
+    <>
+      <div className="bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 p-1 pl-5 flex flex-wrap gap-1 sticky top-0 z-10 items-center shadow-neu-inset-sm rounded-b-xl">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onBack}
+          className="h-8 w-8 mr-1 text-muted-foreground hover:text-foreground"
+          title="Back to Notes"
+        >
+          <ArrowLeft className="w-4 h-4" />
+        </Button>
+        <div className="w-px h-5 bg-muted-foreground/15 rounded-full mx-1 self-center" />
 
-      <ToolbarBtn onClick={() => editor.chain().focus().toggleBold().run()} isActive={editor.isActive('bold')} icon={Bold} title="Bold" />
-      <ToolbarBtn onClick={() => editor.chain().focus().toggleItalic().run()} isActive={editor.isActive('italic')} icon={Italic} title="Italic" />
-      <ToolbarBtn onClick={() => editor.chain().focus().toggleStrike().run()} isActive={editor.isActive('strike')} icon={Strikethrough} title="Strikethrough" />
+        <ToolbarBtn onClick={() => editor.chain().focus().toggleBold().run()} isActive={editor.isActive('bold')} icon={Bold} title="Bold" />
+        <ToolbarBtn onClick={() => editor.chain().focus().toggleItalic().run()} isActive={editor.isActive('italic')} icon={Italic} title="Italic" />
+        <ToolbarBtn onClick={() => editor.chain().focus().toggleStrike().run()} isActive={editor.isActive('strike')} icon={Strikethrough} title="Strikethrough" />
 
-      <div className="w-px h-5 bg-muted-foreground/15 rounded-full mx-1 self-center" />
+        <div className="w-px h-5 bg-muted-foreground/15 rounded-full mx-1 self-center" />
 
-      <ToolbarBtn onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()} isActive={editor.isActive('heading', { level: 1 })} icon={Heading1} title="Heading 1" />
-      <ToolbarBtn onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} isActive={editor.isActive('heading', { level: 2 })} icon={Heading2} title="Heading 2" />
+        <ToolbarBtn onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()} isActive={editor.isActive('heading', { level: 1 })} icon={Heading1} title="Heading 1" />
+        <ToolbarBtn onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} isActive={editor.isActive('heading', { level: 2 })} icon={Heading2} title="Heading 2" />
 
-      <div className="w-px h-5 bg-muted-foreground/15 rounded-full mx-1 self-center" />
+        <div className="w-px h-5 bg-muted-foreground/15 rounded-full mx-1 self-center" />
 
-      <ToolbarBtn onClick={() => editor.chain().focus().toggleBulletList().run()} isActive={editor.isActive('bulletList')} icon={List} title="Bullet List" />
-      <ToolbarBtn onClick={() => editor.chain().focus().toggleOrderedList().run()} isActive={editor.isActive('orderedList')} icon={ListOrdered} title="Ordered List" />
-      <ToolbarBtn onClick={() => editor.chain().focus().toggleBlockquote().run()} isActive={editor.isActive('blockquote')} icon={Quote} title="Quote" />
-      <ToolbarBtn onClick={() => editor.chain().focus().toggleCodeBlock().run()} isActive={editor.isActive('codeBlock')} icon={Code} title="Code Block" />
+        <ToolbarBtn onClick={() => editor.chain().focus().toggleBulletList().run()} isActive={editor.isActive('bulletList')} icon={List} title="Bullet List" />
+        <ToolbarBtn onClick={() => editor.chain().focus().toggleOrderedList().run()} isActive={editor.isActive('orderedList')} icon={ListOrdered} title="Ordered List" />
+        <ToolbarBtn onClick={() => editor.chain().focus().toggleBlockquote().run()} isActive={editor.isActive('blockquote')} icon={Quote} title="Quote" />
+        <ToolbarBtn onClick={() => editor.chain().focus().toggleCodeBlock().run()} isActive={editor.isActive('codeBlock')} icon={Code} title="Code Block" />
 
-      <div className="w-px h-5 bg-muted-foreground/15 rounded-full mx-1 self-center" />
+        <div className="w-px h-5 bg-muted-foreground/15 rounded-full mx-1 self-center" />
 
-      <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" onClick={() => document.getElementById('image-upload').click()} title="Upload Image">
-        <Upload className="w-4 h-4" />
-      </Button>
-      <input type="file" id="image-upload" accept="image/*" onChange={handleImageUpload} className="hidden" />
+        <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" onClick={() => document.getElementById('image-upload').click()} title="Upload Image">
+          <Upload className="w-4 h-4" />
+        </Button>
+        <input type="file" id="image-upload" accept="image/*" onChange={handleImageUpload} className="hidden" />
 
-      <ToolbarBtn onClick={() => {
-        if (editor.isActive('link')) {
-          editor.chain().focus().unsetLink().run();
-        } else {
-          const url = window.prompt('Enter URL:');
-          if (url) {
-            editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run();
-          }
-        }
-      }} isActive={editor.isActive('link')} icon={LinkIcon} title="Link" />
-    </div>
+        <ToolbarBtn
+          onClick={() => {
+            if (editor.isActive('link')) {
+              editor.chain().focus().unsetLink().run();
+            } else {
+              handleOpenLinkDialog();
+            }
+          }}
+          isActive={editor.isActive('link')}
+          icon={LinkIcon}
+          title="Link"
+        />
+      </div>
+
+      <Dialog open={isLinkDialogOpen} onOpenChange={handleCloseLinkDialog}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>Add Link</DialogTitle>
+            <DialogDescription>
+              Enter the URL to apply to the current selection.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleLinkSubmit} className="space-y-4">
+            <Input
+              value={linkUrl}
+              onChange={(e) => setLinkUrl(e.target.value)}
+              placeholder="https://example.com"
+              autoFocus
+            />
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => handleCloseLinkDialog(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={!linkUrl.trim()}>
+                Add Link
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 };
 
@@ -258,6 +319,8 @@ export const Notes = () => {
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
   const [lightboxSrc, setLightboxSrc] = useState('');
   const [editingId, setEditingId] = useState(null);
+  const [deleteDialogNoteId, setDeleteDialogNoteId] = useState(null);
+  const [isDeletingNote, setIsDeletingNote] = useState(false);
 
   // Refs for Auto-save & Editor Context
   const saveTimeoutRef = useRef(null);
@@ -444,8 +507,7 @@ export const Notes = () => {
     try {
       const response = await api.get('/notes');
       setNotes(response.data);
-    } catch (error) {
-      console.error('Failed to fetch notes:', error);
+    } catch {
       toast.error('Failed to load notes');
     } finally {
       setLoading(false);
@@ -494,6 +556,9 @@ export const Notes = () => {
   const selectedNote = useMemo(() =>
     notes.find(n => n.id === selectedNoteId),
     [notes, selectedNoteId]);
+  const notePendingDelete = useMemo(() =>
+    notes.find(n => n.id === deleteDialogNoteId) || null,
+    [notes, deleteDialogNoteId]);
 
   useEffect(() => {
     if (editor && selectedNote && editor.getHTML() !== selectedNote.content) {
@@ -536,16 +601,26 @@ export const Notes = () => {
     }
   };
 
-  const handleDeleteNote = async (id) => {
-    if (!confirm('Are you sure? This will delete all sub-pages as well.')) return;
+  const handleRequestDeleteNote = (id) => {
+    setDeleteDialogNoteId(id);
+  };
+
+  const handleDeleteNote = async () => {
+    if (!deleteDialogNoteId) return;
+
+    setIsDeletingNote(true);
     try {
-      await api.delete(`/notes/${id}`);
-      setNotes(prev => prev.filter(n => n.id !== id)); // Needs recursive filter if purely local, but fetch refresh is safer
-      if (selectedNoteId === id) setSelectedNoteId(null);
+      await api.delete(`/notes/${deleteDialogNoteId}`);
+      setNotes(prev => prev.filter(n => n.id !== deleteDialogNoteId)); // Needs recursive filter if purely local, but fetch refresh is safer
+      if (selectedNoteId === deleteDialogNoteId) setSelectedNoteId(null);
+      if (editingId === deleteDialogNoteId) setEditingId(null);
+      setDeleteDialogNoteId(null);
       fetchNotes(); // Refresh to clean up children
       toast.success('Page deleted');
     } catch (e) {
       toast.error('Failed to delete page');
+    } finally {
+      setIsDeletingNote(false);
     }
   };
 
@@ -559,8 +634,7 @@ export const Notes = () => {
 
     try {
       await api.put(`/notes/${targetId}`, { content });
-    } catch (e) {
-      console.error("Auto-save failed", e);
+    } catch {
       toast.error("Failed to save changes. Check connection.");
     }
   }, [api, selectedNoteId]);
@@ -593,8 +667,8 @@ export const Notes = () => {
     setNotes(prev => prev.map(n => n.id === selectedNoteId ? { ...n, title: newTitle } : n));
     try {
       await api.put(`/notes/${selectedNoteId}`, { title: newTitle });
-    } catch (e) {
-      console.error("Title save failed", e);
+    } catch {
+      toast.error('Failed to save the page title');
     }
   };
 
@@ -604,8 +678,8 @@ export const Notes = () => {
     setNotes(prev => prev.map(n => n.id === id ? { ...n, title } : n));
     try {
       await api.put(`/notes/${id}`, { title });
-    } catch (e) {
-      console.error("Rename failed", e);
+    } catch {
+      toast.error('Failed to rename the page');
     }
   };
 
@@ -745,7 +819,7 @@ export const Notes = () => {
                       onToggleExpand={handleToggleExpand}
                       expandedIds={expandedIds}
                       onCreateChild={handleCreateNote}
-                      onDelete={handleDeleteNote}
+                      onDelete={handleRequestDeleteNote}
                       onToggleFavorite={handleToggleFavorite}
                       editingId={editingId}
                       onRename={handleInlineRename}
@@ -758,6 +832,44 @@ export const Notes = () => {
           </div>
         )}
       </div>
+
+      <Dialog
+        open={Boolean(deleteDialogNoteId)}
+        onOpenChange={(open) => {
+          if (!open && !isDeletingNote) {
+            setDeleteDialogNoteId(null);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>Delete Page</DialogTitle>
+            <DialogDescription>
+              {notePendingDelete?.title
+                ? `Delete "${notePendingDelete.title}" and make the sub-page parent?`
+                : 'Delete this page and make the sub-page parent?'}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setDeleteDialogNoteId(null)}
+              disabled={isDeletingNote}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={handleDeleteNote}
+              disabled={isDeletingNote}
+            >
+              {isDeletingNote ? 'Deleting...' : 'Delete Page'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

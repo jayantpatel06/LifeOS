@@ -47,8 +47,7 @@ export const DataCacheProvider = ({ children }) => {
           // Notify components so they pick up cached data instantly
           Object.keys(cacheRef.current).forEach(k => notifyKey(k));
         }
-      } catch (e) {
-        console.error('Failed to load cache from localStorage', e);
+      } catch {
       }
     }
   }, [getStorageKey, notifyKey]);
@@ -76,8 +75,7 @@ export const DataCacheProvider = ({ children }) => {
     if (storageKey) {
       try {
         localStorage.setItem(storageKey, JSON.stringify(cacheRef.current));
-      } catch (e) {
-        console.error('Failed to save cache to localStorage', e);
+      } catch {
       }
     }
   }, [notifyKey, getStorageKey]);
@@ -99,8 +97,7 @@ export const DataCacheProvider = ({ children }) => {
           localStorage.removeItem(key);
         }
       });
-    } catch (e) {
-      console.error('Failed to clear cache from localStorage', e);
+    } catch {
     }
   }, []);
 
@@ -171,12 +168,10 @@ export const DataCacheProvider = ({ children }) => {
           if (server_time) {
             localStorage.setItem(`${storageKey}_sync`, server_time);
           }
-        } catch (e) {
-          console.error('Failed to save cache to localStorage', e);
+        } catch {
         }
       }
-    } catch (e) {
-      console.error('Prefetch failed:', e);
+    } catch {
     }
   }, [api, notifyKey, getStorageKey]);
 
@@ -250,10 +245,9 @@ export const useCachedFetch = (key, fetchFn, deps = []) => {
       const result = await fetchFn(signal);
       setCached(key, result);
       return result;
-    } catch (e) {
+    } catch {
       if (!signal?.aborted) {
         setLoading(false);
-        console.error(`Cache fetch error [${key}]:`, e);
       }
       return null;
     }

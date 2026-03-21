@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { MainLayout } from "./components/layout/MainLayout";
 import { Toaster } from "./components/ui/sonner";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { RouteSeo } from "./components/Seo";
 import { DataCacheProvider } from "./contexts/DataCacheContext";
 
 import { Auth } from "./pages/Auth";
@@ -14,18 +15,6 @@ import { Budget } from "./pages/Budget";
 import { FocusTimer } from "./pages/FocusTimer";
 import { Achievements } from "./pages/Achievements";
 import { Settings } from "./pages/Settings";
-
-const ProtectedRoute = ({ children }) => {
-  const { isAuthenticated, loading } = useAuth();
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-background animate-in fade-in duration-200" />
-    );
-  }
-
-  return isAuthenticated ? children : <Navigate to="/" replace />;
-};
 
 const PublicRoute = ({ children }) => {
   const { isAuthenticated, loading } = useAuth();
@@ -67,6 +56,7 @@ function AppRoutes() {
 function App() {
   return (
     <BrowserRouter>
+      <RouteSeo />
       <AuthProvider>
         <DataCacheProvider>
           <ErrorBoundary>

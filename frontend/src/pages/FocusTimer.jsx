@@ -50,8 +50,7 @@ export const FocusTimer = () => {
     if (soundEnabled) {
       try {
         audioRef.current?.play();
-      } catch (e) {
-        console.log('Audio play failed:', e);
+      } catch {
       }
     }
 
@@ -66,8 +65,8 @@ export const FocusTimer = () => {
         setSessionsCompleted(prev => prev + 1);
         refetchStats();
         refreshUser();
-      } catch (error) {
-        console.error('Failed to complete session:', error);
+      } catch {
+        toast.error('Failed to complete the focus session');
       }
       setCurrentSession(null);
     }
@@ -142,8 +141,8 @@ export const FocusTimer = () => {
           duration_actual: customDuration * 60 - timeLeft,
           interrupted: true,
         });
-      } catch (error) {
-        console.error('Failed to end session:', error);
+      } catch {
+        toast.error('Failed to reset the active session');
       }
       setCurrentSession(null);
     }
