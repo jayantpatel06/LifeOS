@@ -18,6 +18,23 @@ export const DataCacheProvider = ({ children }) => {
     return user?.id ? `lifeos_data_cache_${user.id}` : null;
   }, [user?.id]);
 
+  // Notify subscribers for a specific key (not the whole tree)
+  const notifyKey = useCallback((key) => {
+    const subs = subscribersRef.current.get(key);
+    if (subs) {
+      subs.forEach(cb => cb(cacheRef.current[key]?.data));
+    }
+  }, []);
+
+  // Subscribe to cache updates for a specific key
+  const subscribe = useCallback((key, callback) => {
+    if (!subscribersRef.current.has(key)) {
+      subscribersRef.current.set(key, new Set());
+    }
+    subscribersRef.current.get(key).add(callback);
+    return () => subscribersRef.current.get(key)?.delete(callback);
+  }, []);
+
   // Load from localStorage on mount or when user changes
   useEffect(() => {
     const key = getStorageKey();
@@ -35,23 +52,6 @@ export const DataCacheProvider = ({ children }) => {
       }
     }
   }, [getStorageKey, notifyKey]);
-
-  // Subscribe to cache updates for a specific key
-  const subscribe = useCallback((key, callback) => {
-    if (!subscribersRef.current.has(key)) {
-      subscribersRef.current.set(key, new Set());
-    }
-    subscribersRef.current.get(key).add(callback);
-    return () => subscribersRef.current.get(key)?.delete(callback);
-  }, []);
-
-  // Notify subscribers for a specific key (not the whole tree)
-  const notifyKey = useCallback((key) => {
-    const subs = subscribersRef.current.get(key);
-    if (subs) {
-      subs.forEach(cb => cb(cacheRef.current[key]?.data));
-    }
-  }, []);
 
   // Get cached data
   const getCached = useCallback((key) => {
