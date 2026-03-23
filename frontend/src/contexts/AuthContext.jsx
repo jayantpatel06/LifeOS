@@ -11,9 +11,16 @@ const HEALTHCHECK_URL = process.env.REACT_APP_BACKEND_URL
   : '/health';
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
-  const [token, setToken] = useState(localStorage.getItem('lifeos_token'));
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState(() => {
+    try {
+      const storedUser = localStorage.getItem('lifeos_user');
+      return storedUser ? JSON.parse(storedUser) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [token, setToken] = useState(() => localStorage.getItem('lifeos_token'));
+  const [loading, setLoading] = useState(() => Boolean(localStorage.getItem('lifeos_token') && !localStorage.getItem('lifeos_user')));
   const [backendStatus, setBackendStatus] = useState('idle');
   const backendStatusRef = useRef('idle');
   const warmupPromiseRef = useRef(null);
@@ -31,6 +38,23 @@ export const AuthProvider = ({ children }) => {
       delete api.defaults.headers.Authorization;
     }
   }, [api]);
+
+  const persistUser = useCallback((nextUser) => {
+    if (nextUser) {
+      localStorage.setItem('lifeos_user', JSON.stringify(nextUser));
+    } else {
+      localStorage.removeItem('lifeos_user');
+    }
+    setUser(nextUser);
+  }, []);
+
+  const clearAuthState = useCallback(() => {
+    localStorage.removeItem('lifeos_token');
+    localStorage.removeItem('lifeos_user');
+    applyTokenToApi(null);
+    setToken(null);
+    setUser(null);
+  }, [applyTokenToApi]);
 
   // Update axios headers when token changes
   useEffect(() => {
@@ -83,15 +107,13 @@ export const AuthProvider = ({ children }) => {
       (response) => response,
       (error) => {
         if (error.response?.status === 401) {
-          localStorage.removeItem('lifeos_token');
-          setToken(null);
-          setUser(null);
+          clearAuthState();
         }
         return Promise.reject(error);
       }
     );
     return () => api.interceptors.response.eject(interceptor);
-  }, [api]);
+  }, [api, clearAuthState]);
 
   // Proactive token refresh — refresh every 20 hours (token lasts 24h)
   useEffect(() => {
@@ -104,13 +126,12 @@ export const AuthProvider = ({ children }) => {
         localStorage.setItem('lifeos_token', access_token);
         applyTokenToApi(access_token);
         setToken(access_token);
-        setUser(userData);
-      } catch (e) {
-        console.error('Token refresh failed:', e);
+        persistUser(userData);
+      } catch {
       }
     }, REFRESH_INTERVAL);
     return () => clearInterval(interval);
-  }, [token, api, applyTokenToApi]);
+  }, [token, api, applyTokenToApi, persistUser]);
 
   const fetchUser = useCallback(async () => {
     if (!token) {
@@ -118,20 +139,20 @@ export const AuthProvider = ({ children }) => {
       return;
     }
 
+    // Let cached user keep the session usable while the backend wakes up.
+    setLoading(false);
+
     try {
-      const response = await axios.get(`${API}/auth/me`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setUser(response.data);
+      const response = await api.get('/auth/me');
+      persistUser(response.data);
     } catch (error) {
-      console.error('Failed to fetch user:', error);
-      localStorage.removeItem('lifeos_token');
-      setToken(null);
-      setUser(null);
+      if (error.response?.status === 401) {
+        clearAuthState();
+      }
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [token, api, persistUser, clearAuthState]);
 
   useEffect(() => {
     fetchUser();
@@ -143,9 +164,9 @@ export const AuthProvider = ({ children }) => {
     localStorage.setItem('lifeos_token', access_token);
     applyTokenToApi(access_token);
     setToken(access_token);
-    setUser(userData);
+    persistUser(userData);
     return userData;
-  }, [applyTokenToApi]);
+  }, [applyTokenToApi, persistUser]);
 
   const register = useCallback(async (email, password, username) => {
     const response = await axios.post(`${API}/auth/register`, { email, password, username });
@@ -153,16 +174,13 @@ export const AuthProvider = ({ children }) => {
     localStorage.setItem('lifeos_token', access_token);
     applyTokenToApi(access_token);
     setToken(access_token);
-    setUser(userData);
+    persistUser(userData);
     return userData;
-  }, [applyTokenToApi]);
+  }, [applyTokenToApi, persistUser]);
 
   const logout = useCallback(() => {
-    localStorage.removeItem('lifeos_token');
-    applyTokenToApi(null);
-    setToken(null);
-    setUser(null);
-  }, [applyTokenToApi]);
+    clearAuthState();
+  }, [clearAuthState]);
 
   const refreshUser = useCallback(async () => {
     await fetchUser();
@@ -179,7 +197,7 @@ export const AuthProvider = ({ children }) => {
     refreshUser,
     warmBackend,
     api,
-    isAuthenticated: !!user
+    isAuthenticated: !!token
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

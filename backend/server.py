@@ -3,7 +3,6 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import RedirectResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from motor.motor_asyncio import AsyncIOMotorClient
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -25,11 +24,15 @@ import cloudinary
 import cloudinary.uploader
 from cloudinary.exceptions import Error as CloudinaryError
 from cloudinary.utils import cloudinary_url
+import asyncio
+import certifi
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-import certifi
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 # MongoDB connection (tuned for lower latency)
 mongo_url = os.environ['MONGO_URL']
@@ -59,18 +62,16 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 api_router = APIRouter(prefix="/api")
 security = HTTPBearer(auto_error=False)
 
-# Health check endpoint (responds immediately for Render/deployment health checks)
+# Health check endpoints (respond immediately for Render/deployment health checks)
 @app.get("/")
 async def health_check():
+    """Root health check for deployment platforms."""
     return {"status": "ok", "service": "LifeOS API"}
 
 @app.get("/health")
 async def health():
+    """Dedicated health check endpoint."""
     return {"status": "healthy"}
-
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
 
 # ============ MODELS ============
 
@@ -187,6 +188,18 @@ class NoteResponse(BaseModel):
     created_at: str
     updated_at: str
 
+class NoteSummaryResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str
+    user_id: str
+    title: str
+    categories: List[str] = ["general"]
+    tags: List[str] = []
+    is_favorite: bool
+    parent_id: Optional[str] = None
+    created_at: str
+    updated_at: str
+
 class BudgetSheetCreate(BaseModel):
     name: str
 
@@ -286,10 +299,11 @@ def verify_password(password: str, hashed: str) -> bool:
     return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
 
 def create_token(user_id: str, email: str) -> str:
+    """Create a JWT access token. Uses UTC for expiration (PyJWT requires UTC)."""
     payload = {
         "sub": user_id,
         "email": email,
-        "exp": datetime.now(ZoneInfo("Asia/Kolkata")) + timedelta(hours=JWT_EXPIRATION_HOURS)
+        "exp": datetime.now(timezone.utc) + timedelta(hours=JWT_EXPIRATION_HOURS)
     }
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
@@ -369,26 +383,81 @@ async def update_streak(user_id: str):
         )
 
 async def update_daily_activity(user_id: str, field: str, increment: int = 1):
+    """Atomically increment a daily activity counter, creating the document if needed."""
     today = datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%Y-%m-%d")
-    
-    existing = await db.daily_activity.find_one({"user_id": user_id, "date": today}, {"_id": 0})
-    
-    if existing:
-        await db.daily_activity.update_one(
-            {"user_id": user_id, "date": today},
-            {"$inc": {field: increment}}
-        )
-    else:
-        activity = {
-            "id": str(uuid.uuid4()),
-            "user_id": user_id,
-            "date": today,
-            "tasks_completed": 0,
-            "focus_time": 0,
-            "notes_created": 0,
-        }
-        activity[field] = increment
-        await db.daily_activity.insert_one(activity)
+    # Atomic upsert: avoids race condition where two concurrent requests
+    # both see no existing doc and try to insert, violating the unique index.
+    await db.daily_activity.update_one(
+        {"user_id": user_id, "date": today},
+        {
+            "$inc": {field: increment},
+            "$setOnInsert": {
+                "id": str(uuid.uuid4()),
+                "user_id": user_id,
+                "date": today,
+            },
+        },
+        upsert=True,
+    )
+
+def get_trusted_checklist_completions(previous_checklist, next_checklist) -> int:
+    if len(previous_checklist) != len(next_checklist):
+        return 0
+
+    newly_completed = 0
+    for previous_item, next_item in zip(previous_checklist, next_checklist):
+        if previous_item.get("text") != next_item.get("text"):
+            return 0
+        if not previous_item.get("completed") and next_item.get("completed"):
+            newly_completed += 1
+
+    return newly_completed
+
+async def get_activity_totals(user_id: str):
+    totals = await db.daily_activity.aggregate([
+        {"$match": {"user_id": user_id}},
+        {"$group": {
+            "_id": None,
+            "tasks_completed": {"$sum": "$tasks_completed"},
+            "focus_time": {"$sum": "$focus_time"},
+            "notes_created": {"$sum": "$notes_created"},
+        }},
+    ]).to_list(1)
+
+    if totals:
+        return totals[0]
+
+    return {
+        "tasks_completed": 0,
+        "focus_time": 0,
+        "notes_created": 0,
+    }
+
+async def get_focus_summary(user_id: str, started_since: Optional[str] = None):
+    query = {
+        "user_id": user_id,
+        "completed_at": {"$ne": None},
+        "interrupted": False,
+    }
+    if started_since:
+        query["started_at"] = {"$gte": started_since}
+
+    summary = await db.focus_sessions.aggregate([
+        {"$match": query},
+        {"$group": {
+            "_id": None,
+            "total_focus_time": {"$sum": "$duration_actual"},
+            "total_sessions": {"$sum": 1},
+        }},
+    ]).to_list(1)
+
+    if summary:
+        return summary[0]
+
+    return {
+        "total_focus_time": 0,
+        "total_sessions": 0,
+    }
 
 ALLOWED_IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.bmp', '.ico'}
 MAX_UPLOAD_SIZE = 5 * 1024 * 1024  # 5MB
@@ -434,7 +503,6 @@ def _cloudinary_thumb_url(public_id: str) -> str:
 
 
 @api_router.post("/upload-image", response_model=UploadImageResponse)
-@app.post("/upload-image", response_model=UploadImageResponse)
 @limiter.limit("20/minute")
 async def upload_image(request: Request, file: UploadFile = File(...), user: dict = Depends(get_current_user)):
     """Upload image to Cloudinary and return thumbnail + full image references."""
@@ -498,7 +566,6 @@ async def upload_file(request: Request, file: UploadFile = File(...), user: dict
 
 
 @api_router.get("/image/{file_id:path}")
-@app.get("/image/{file_id:path}")
 async def get_image(file_id: str):
     """Resolve image by Cloudinary public_id and redirect to its CDN URL."""
     _configure_cloudinary()
@@ -611,17 +678,19 @@ async def delete_user_account(user: dict = Depends(get_current_user)):
     """Delete user account and all associated data (cascading delete)."""
     user_id = user["id"]
 
-    # Delete all user data from all collections
-    await db.tasks.delete_many({"user_id": user_id})
-    await db.notes.delete_many({"user_id": user_id})
-    await db.budget_rows.delete_many({"user_id": user_id})
-    await db.budget_sheets.delete_many({"user_id": user_id})
-    await db.focus_sessions.delete_many({"user_id": user_id})
-    await db.habits.delete_many({"user_id": user_id})
-    await db.daily_activity.delete_many({"user_id": user_id})
-    await db.user_achievements.delete_many({"user_id": user_id})
+    # Delete all user data from all collections in parallel for speed
+    await asyncio.gather(
+        db.tasks.delete_many({"user_id": user_id}),
+        db.notes.delete_many({"user_id": user_id}),
+        db.budget_rows.delete_many({"user_id": user_id}),
+        db.budget_sheets.delete_many({"user_id": user_id}),
+        db.focus_sessions.delete_many({"user_id": user_id}),
+        db.habits.delete_many({"user_id": user_id}),
+        db.daily_activity.delete_many({"user_id": user_id}),
+        db.user_achievements.delete_many({"user_id": user_id}),
+    )
 
-    # Finally delete the user
+    # Finally delete the user (must happen after data is cleaned)
     await db.users.delete_one({"id": user_id})
 
     return {"message": "Account and all data deleted successfully"}
@@ -688,9 +757,10 @@ async def update_task(task_id: str, data: TaskUpdate, user: dict = Depends(get_c
     
     # Handle checklist item completions
     if "checklist" in update_data:
-        old_completed = sum(1 for item in task.get("checklist", []) if item.get("completed"))
-        new_completed = sum(1 for item in update_data["checklist"] if item.get("completed"))
-        newly_completed = new_completed - old_completed
+        newly_completed = get_trusted_checklist_completions(
+            task.get("checklist", []),
+            update_data["checklist"],
+        )
         
         if newly_completed > 0:
             xp_reward = (10 + (task.get("priority", 1) * 10)) * newly_completed
@@ -724,6 +794,9 @@ async def complete_task(task_id: str, user: dict = Depends(get_current_user)):
     task = await db.tasks.find_one({"id": task_id, "user_id": user["id"]}, {"_id": 0})
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
+
+    if task.get("status") == "completed":
+        return task
     
     now = datetime.now(ZoneInfo("Asia/Kolkata")).isoformat()
     
@@ -758,10 +831,23 @@ async def delete_task(task_id: str, user: dict = Depends(get_current_user)):
 async def get_notes(category: Optional[str] = None, user: dict = Depends(get_current_user)):
     query = {"user_id": user["id"]}
     if category:
-        query["category"] = category
+        # Query the 'categories' array field (MongoDB matches array elements automatically)
+        query["categories"] = category
     
     notes = await db.notes.find(query, {"_id": 0}).sort("updated_at", -1).to_list(1000)
     # Handle legacy data and field rename
+    for n in notes:
+        if "categories" not in n:
+            n["categories"] = [n.pop("category", "general")] if isinstance(n.get("category"), str) else n.get("category", ["general"])
+    return notes
+
+@api_router.get("/notes/index", response_model=List[NoteSummaryResponse])
+async def get_note_index(category: Optional[str] = None, user: dict = Depends(get_current_user)):
+    query = {"user_id": user["id"]}
+    if category:
+        query["categories"] = category
+
+    notes = await db.notes.find(query, {"_id": 0, "content": 0}).sort("updated_at", -1).to_list(1000)
     for n in notes:
         if "categories" not in n:
             n["categories"] = [n.pop("category", "general")] if isinstance(n.get("category"), str) else n.get("category", ["general"])
@@ -963,6 +1049,7 @@ async def import_sheet_csv(sheet_id: str, file: UploadFile = File(...), user: di
         reader = csv.DictReader(io.StringIO(text))
         
         imported = 0
+        rows_to_insert = []
         now = datetime.now(ZoneInfo("Asia/Kolkata")).isoformat()
         current_order = await db.budget_rows.count_documents({"sheet_id": sheet_id, "user_id": user["id"]})
         
@@ -1001,8 +1088,12 @@ async def import_sheet_csv(sheet_id: str, file: UploadFile = File(...), user: di
                 "created_at": now
             }
             
-            await db.budget_rows.insert_one(row_doc)
+            rows_to_insert.append(row_doc)
             imported += 1
+
+        # Batch insert all rows at once for better performance
+        if rows_to_insert:
+            await db.budget_rows.insert_many(rows_to_insert)
         
         return {"message": f"Imported {imported} rows", "count": imported}
     except Exception as e:
@@ -1061,8 +1152,23 @@ async def complete_focus_session(session_id: str, data: FocusSessionComplete, us
     session = await db.focus_sessions.find_one({"id": session_id, "user_id": user["id"]}, {"_id": 0})
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
-    
-    now = datetime.now(ZoneInfo("Asia/Kolkata")).isoformat()
+
+    if session.get("completed_at") is not None:
+        raise HTTPException(status_code=409, detail="Session already completed")
+
+    now_dt = datetime.now(ZoneInfo("Asia/Kolkata"))
+    now = now_dt.isoformat()
+    started_at = datetime.fromisoformat(session["started_at"])
+    planned_duration = max(0, session.get("duration_planned") or 0)
+    elapsed_minutes = max(0, int((now_dt - started_at).total_seconds() // 60))
+    max_allowed_duration = min(planned_duration + 1, elapsed_minutes + 1)
+
+    if data.duration_actual < 0:
+        raise HTTPException(status_code=400, detail="Duration cannot be negative")
+    if not data.interrupted and data.duration_actual <= 0:
+        raise HTTPException(status_code=400, detail="Completed sessions must have a positive duration")
+    if data.duration_actual > max_allowed_duration:
+        raise HTTPException(status_code=400, detail="Reported duration exceeds the allowed session time")
     
     await db.focus_sessions.update_one(
         {"id": session_id},
@@ -1090,24 +1196,18 @@ async def get_focus_sessions(user: dict = Depends(get_current_user)):
 
 @api_router.get("/focus/stats")
 async def get_focus_stats(user: dict = Depends(get_current_user)):
-    # Only count sessions that completed naturally (not interrupted/reset)
-    sessions = await db.focus_sessions.find(
-        {"user_id": user["id"], "completed_at": {"$ne": None}, "interrupted": False},
-        {"_id": 0}
-    ).to_list(1000)
-    
-    total_time = sum(s.get("duration_actual", 0) for s in sessions)
-    total_sessions = len(sessions)
-    
-    today = datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%Y-%m-%d")
-    today_sessions = [s for s in sessions if s["started_at"].startswith(today)]
-    today_time = sum(s.get("duration_actual", 0) for s in today_sessions)
-    
+    user_id = user["id"]
+    today_start = datetime.now(ZoneInfo("Asia/Kolkata")).replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+    overall_summary, today_summary = await asyncio.gather(
+        get_focus_summary(user_id),
+        get_focus_summary(user_id, started_since=today_start),
+    )
+
     return {
-        "total_focus_time": total_time,
-        "total_sessions": total_sessions,
-        "today_focus_time": today_time,
-        "today_sessions": len(today_sessions)
+        "total_focus_time": overall_summary.get("total_focus_time", 0),
+        "total_sessions": overall_summary.get("total_sessions", 0),
+        "today_focus_time": today_summary.get("total_focus_time", 0),
+        "today_sessions": today_summary.get("total_sessions", 0),
     }
 
 # ============ HABIT ROUTES ============
@@ -1212,41 +1312,39 @@ async def delete_habit(habit_id: str, user: dict = Depends(get_current_user)):
 
 @api_router.put("/habits/reorder")
 async def reorder_habits(data: HabitReorder, user: dict = Depends(get_current_user)):
-    """Reorder habits by providing list of habit IDs in desired order."""
-    for index, habit_id in enumerate(data.habit_ids):
-        await db.habits.update_one(
+    """Reorder habits by providing list of habit IDs in desired order. Uses bulk_write for efficiency."""
+    if not data.habit_ids:
+        return {"message": "Habits reordered"}
+    operations = [
+        UpdateOne(
             {"id": habit_id, "user_id": user["id"]},
             {"$set": {"order": index}}
         )
+        for index, habit_id in enumerate(data.habit_ids)
+    ]
+    await db.habits.bulk_write(operations)
     return {"message": "Habits reordered"}
 
 # ============ DASHBOARD ROUTES ============
 
 @api_router.get("/dashboard/stats", response_model=DashboardStats)
 async def get_dashboard_stats(user: dict = Depends(get_current_user)):
-    user_data = await db.users.find_one({"id": user["id"]}, {"_id": 0})
-    
-    notes_count = await db.notes.count_documents({"user_id": user["id"]})
-    
-    all_activities = await db.daily_activity.find({"user_id": user["id"]}, {"_id": 0}).to_list(10000)
-    total_tasks_completed = sum(a.get("tasks_completed", 0) for a in all_activities)
-    
-    total_focus_time = sum(
-        s.get("duration_actual", 0)
-        for s in await db.focus_sessions.find(
-            {"user_id": user["id"], "completed_at": {"$ne": None}, "interrupted": False},
-            {"_id": 0}
-        ).to_list(10000)
+    user_id = user["id"]
+    user_data, notes_count, activity_totals, focus_summary = await asyncio.gather(
+        db.users.find_one({"id": user_id}, {"_id": 0}),
+        db.notes.count_documents({"user_id": user_id}),
+        get_activity_totals(user_id),
+        get_focus_summary(user_id),
     )
-    
+
     return DashboardStats(
         current_streak=user_data.get("current_streak", 0),
         longest_streak=user_data.get("longest_streak", 0),
         total_xp=user_data.get("total_xp", 0),
         current_level=user_data.get("current_level", 1),
         notes_count=notes_count,
-        total_tasks_completed=total_tasks_completed,
-        total_focus_time=total_focus_time,
+        total_tasks_completed=activity_totals.get("tasks_completed", 0),
+        total_focus_time=focus_summary.get("total_focus_time", 0),
     )
 
 @api_router.get("/dashboard/activity", response_model=List[DailyActivityResponse])
@@ -1259,8 +1357,6 @@ async def get_activity_data(days: int = 365, user: dict = Depends(get_current_us
     ).sort("date", 1).to_list(days)
     
     return activities
-import asyncio
-
 @api_router.get("/preload")
 async def preload_data(since: Optional[str] = None, user: dict = Depends(get_current_user)):
     """Fetch core data in a single round-trip to reduce initial load latency."""
@@ -1321,19 +1417,21 @@ ACHIEVEMENTS = [
 
 # Helper to check and unlock achievements for user
 async def check_achievements(user_id: str):
-    user_data = await db.users.find_one({"id": user_id}, {"_id": 0})
+    user_data, activity_totals, focus_summary, notes_count, user_achievements = await asyncio.gather(
+        db.users.find_one({"id": user_id}, {"_id": 0}),
+        get_activity_totals(user_id),
+        get_focus_summary(user_id),
+        db.notes.count_documents({"user_id": user_id}),
+        db.user_achievements.find({"user_id": user_id}, {"_id": 0}).to_list(100),
+    )
     if not user_data:
         return
-    
-    all_activities = await db.daily_activity.find({"user_id": user_id}, {"_id": 0}).to_list(10000)
-    tasks_completed = sum(a.get("tasks_completed", 0) for a in all_activities)
-    focus_sessions = await db.focus_sessions.count_documents({"user_id": user_id, "completed_at": {"$ne": None}, "interrupted": False})
-    notes_count = await db.notes.count_documents({"user_id": user_id})
+
+    tasks_completed = activity_totals.get("tasks_completed", 0)
+    focus_sessions = focus_summary.get("total_sessions", 0)
     current_streak = user_data.get("longest_streak", 0)
-    sessions = await db.focus_sessions.find({"user_id": user_id, "completed_at": {"$ne": None}, "interrupted": False}, {"_id": 0}).to_list(10000)
-    total_focus_minutes = sum(s.get("duration_actual", 0) for s in sessions)
-    
-    user_achievements = await db.user_achievements.find({"user_id": user_id}, {"_id": 0}).to_list(100)
+    total_focus_minutes = focus_summary.get("total_focus_time", 0)
+
     unlocked_ids = {ua["achievement_id"] for ua in user_achievements}
     
     for ach in ACHIEVEMENTS:
@@ -1363,20 +1461,20 @@ async def check_achievements(user_id: str):
 
 @api_router.get("/achievements", response_model=List[AchievementResponse])
 async def get_achievements(user: dict = Depends(get_current_user)):
-    # Get user stats
-    tasks_completed = await db.tasks.count_documents({"user_id": user["id"], "status": "completed"})
-    focus_sessions = await db.focus_sessions.count_documents({"user_id": user["id"], "completed_at": {"$ne": None}, "interrupted": False})
-    notes_count = await db.notes.count_documents({"user_id": user["id"]})
-    
-    user_data = await db.users.find_one({"id": user["id"]}, {"_id": 0})
+    user_id = user["id"]
+    activity_totals, focus_summary, notes_count, user_data, user_achievements = await asyncio.gather(
+        get_activity_totals(user_id),
+        get_focus_summary(user_id),
+        db.notes.count_documents({"user_id": user_id}),
+        db.users.find_one({"id": user_id}, {"_id": 0}),
+        db.user_achievements.find({"user_id": user_id}, {"_id": 0}).to_list(100),
+    )
+
+    tasks_completed = activity_totals.get("tasks_completed", 0)
     current_streak = user_data.get("longest_streak", 0)
-    
-    # Calculate total focus hours
-    sessions = await db.focus_sessions.find({"user_id": user["id"], "completed_at": {"$ne": None}, "interrupted": False}, {"_id": 0}).to_list(1000)
-    total_focus_minutes = sum(s.get("duration_actual", 0) for s in sessions)
-    
-    # Get unlocked achievements
-    user_achievements = await db.user_achievements.find({"user_id": user["id"]}, {"_id": 0}).to_list(100)
+    focus_sessions = focus_summary.get("total_sessions", 0)
+    total_focus_minutes = focus_summary.get("total_focus_time", 0)
+
     unlocked_ids = {ua["achievement_id"]: ua["unlocked_at"] for ua in user_achievements}
     
     result = []
@@ -1398,11 +1496,11 @@ async def get_achievements(user: dict = Depends(get_current_user)):
             now = datetime.now(ZoneInfo("Asia/Kolkata")).isoformat()
             await db.user_achievements.insert_one({
                 "id": str(uuid.uuid4()),
-                "user_id": user["id"],
+                "user_id": user_id,
                 "achievement_id": ach["id"],
                 "unlocked_at": now
             })
-            await add_xp(user["id"], ach["xp_reward"])
+            await add_xp(user_id, ach["xp_reward"])
             unlocked_ids[ach["id"]] = now
         
         result.append(AchievementResponse(
@@ -1428,45 +1526,53 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Ensure static directory exists
-static_dir = ROOT_DIR / "static"
-static_dir.mkdir(parents=True, exist_ok=True)
-
-# Mount static files
-app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
-
 # Include router
 app.include_router(api_router)
 
 @app.on_event("startup")
 async def startup_db_client():
+    """Initialize DB connection and ensure indexes on startup."""
     try:
         await client.admin.command("ping")
         logger.info(f"✅ Successfully connected to MongoDB database: '{os.environ['DB_NAME']}'")
-        
+
         # Create indexes for performance
         await db.users.create_index("id", unique=True)
         await db.users.create_index("email", unique=True)
         await db.users.create_index("username", unique=True)
 
         # Task indexes
+        await db.tasks.create_index("id", unique=True)
         await db.tasks.create_index([("user_id", 1), ("status", 1)])
+        await db.tasks.create_index([("user_id", 1), ("created_at", -1)])
         await db.tasks.create_index([("user_id", 1), ("due_date", 1)])
         await db.tasks.create_index([("user_id", 1), ("is_pinned", -1), ("created_at", -1)])
+        await db.tasks.create_index([("user_id", 1), ("updated_at", -1)])
         await db.tasks.create_index("user_id")
 
         # Note indexes
+        await db.notes.create_index("id", unique=True)
         await db.notes.create_index("user_id")
+        await db.notes.create_index([("user_id", 1), ("created_at", -1)])
         await db.notes.create_index([("user_id", 1), ("parent_id", 1)])
         await db.notes.create_index([("user_id", 1), ("is_favorite", -1)])
+        await db.notes.create_index([("user_id", 1), ("updated_at", -1)])
 
         # Budget indexes
+        await db.budget_sheets.create_index("id", unique=True)
         await db.budget_sheets.create_index("user_id")
+        await db.budget_sheets.create_index([("user_id", 1), ("order", 1)])
+        await db.budget_sheets.create_index([("user_id", 1), ("created_at", -1)])
+        await db.budget_rows.create_index("id", unique=True)
         await db.budget_rows.create_index([("sheet_id", 1), ("user_id", 1)])
+        await db.budget_rows.create_index([("sheet_id", 1), ("user_id", 1), ("order", 1)])
 
         # Focus & habits indexes
+        await db.focus_sessions.create_index("id", unique=True)
         await db.focus_sessions.create_index([("user_id", 1), ("completed_at", -1)])
+        await db.focus_sessions.create_index([("user_id", 1), ("interrupted", 1), ("completed_at", -1)])
         await db.focus_sessions.create_index([("user_id", 1), ("started_at", -1)])
+        await db.habits.create_index("id", unique=True)
         await db.habits.create_index([("user_id", 1), ("order", 1)])
 
         # Activity & achievements indexes
@@ -1478,6 +1584,7 @@ async def startup_db_client():
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
+    """Close MongoDB connection on shutdown."""
     client.close()
     logger.info("🔌 MongoDB connection closed")
 

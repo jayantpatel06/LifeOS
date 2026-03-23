@@ -1,49 +1,46 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
+import { useCachedFetch } from '../contexts/DataCacheContext';
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Progress } from '../components/ui/progress';
 import { Separator } from '../components/ui/separator';
-import { Badge } from '../components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../components/ui/tooltip';
 import { toast } from 'sonner';
 import {
-  User, Mail, Calendar, Flame, Zap, Award, Shield, LogOut,
+  User, Flame, Zap, LogOut,
   CheckSquare, Timer
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { format, parseISO, eachDayOfInterval, subMonths, startOfMonth, endOfMonth } from 'date-fns';
-import { useNavigate } from 'react-router-dom';
 
 export const Settings = () => {
-  const { user, api, logout, refreshUser } = useAuth();
-  const navigate = useNavigate();
+  const { user, api, logout } = useAuth();
   const [stats, setStats] = useState(null);
   const [activityData, setActivityData] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const controller = new AbortController();
-    const fetchData = async () => {
-      try {
-        const [statsRes, activityRes] = await Promise.all([
-          api.get('/dashboard/stats', { signal: controller.signal }),
-          api.get('/dashboard/activity?days=365', { signal: controller.signal }),
-        ]);
-        setStats(statsRes.data);
-        setActivityData(activityRes.data);
-        refreshUser();
-      } catch {
-        if (!controller.signal.aborted) {
-          toast.error('Failed to load settings data');
-        }
-      } finally {
-        setLoading(false);
-      }
+  const [cachedSettingsData, cacheLoading] = useCachedFetch('settingsData', async (signal) => {
+    const [statsRes, activityRes] = await Promise.all([
+      api.get('/dashboard/stats', { signal }),
+      api.get('/dashboard/activity?days=365', { signal }),
+    ]);
+
+    return {
+      activityData: activityRes.data,
+      stats: statsRes.data,
     };
-    fetchData();
-    return () => controller.abort();
-  }, [api, refreshUser]);
+  }, [api]);
+
+  useEffect(() => {
+    if (cachedSettingsData) {
+      setStats(cachedSettingsData.stats);
+      setActivityData(cachedSettingsData.activityData);
+      setLoading(false);
+    } else if (!cacheLoading) {
+      setLoading(false);
+    }
+  }, [cacheLoading, cachedSettingsData]);
 
   const handleLogout = () => {
     logout();
@@ -71,7 +68,16 @@ export const Settings = () => {
     return Math.min(100, ((xp - levelXP) / (nextLevelXP - levelXP)) * 100);
   };
 
-  // Contribution grid
+  /**
+   * Contribution Grid Algorithm:
+   * Generates 12 months (365 days) of contribution data in a format suitable 
+   * for a GitHub-style activity graph.
+   * 1. Maps activities by date into a lookup table.
+   * 2. Iterates over the last 12 months, figuring out the leading empty days 
+   *    needed to align the start of the month to the correct day of the week.
+   * 3. Calculates the "level" (0-4) of activity for color coding.
+   * 4. Pads the end of the month with empty cells to keep the grid aligned.
+   */
   const generateMonthData = () => {
     const today = new Date();
     const months = [];
@@ -103,7 +109,7 @@ export const Settings = () => {
     return months;
   };
 
-  const monthsData = generateMonthData();
+  const monthsData = useMemo(generateMonthData, [activityData]);
   const totalSubmissions = activityData.reduce((sum, d) => sum + d.tasks_completed + Math.floor(d.focus_time / 25), 0);
   const totalActiveDays = activityData.filter(d => (d.tasks_completed + d.focus_time) > 0).length;
 

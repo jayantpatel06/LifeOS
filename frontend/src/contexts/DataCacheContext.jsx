@@ -59,6 +59,11 @@ export const DataCacheProvider = ({ children }) => {
     return entry.data;
   }, []);
 
+  const getCacheTimestamp = useCallback((key) => {
+    const entry = cacheRef.current[key];
+    return entry?.timestamp || 0;
+  }, []);
+
   // Check if cached data is still fresh
   const isFresh = useCallback((key) => {
     const entry = cacheRef.current[key];
@@ -105,6 +110,7 @@ export const DataCacheProvider = ({ children }) => {
   const prefetchAll = useCallback(async () => {
     if (!api) return;
     try {
+      const requestStartedAt = Date.now();
       const isDeltaSync = !!lastSyncRef.current;
       const url = isDeltaSync 
         ? `/preload?since=${encodeURIComponent(lastSyncRef.current)}` 
@@ -114,6 +120,10 @@ export const DataCacheProvider = ({ children }) => {
       const { tasks, notes, budget_sheets, server_time } = res.data;
       const now = Date.now();
       
+      const tasksModifiedDuringRequest = getCacheTimestamp('tasks') > requestStartedAt;
+      const notesModifiedDuringRequest = getCacheTimestamp('notes') > requestStartedAt;
+      const sheetsModifiedDuringRequest = getCacheTimestamp('budget_sheets') > requestStartedAt;
+
       if (isDeltaSync) {
         // Delta sync: Merge new items into existing cache
         const mergeArr = (oldArr = [], newArr = []) => {
@@ -129,30 +139,41 @@ export const DataCacheProvider = ({ children }) => {
 
         cacheRef.current = {
           ...cacheRef.current,
-          tasks: { 
-            data: mergeArr(existingTasks, tasks).sort((a,b) => new Date(b.created_at) - new Date(a.created_at)), 
-            timestamp: now 
-          },
-          notes: { 
-            data: mergeArr(existingNotes, notes).sort((a,b) => new Date(b.updated_at) - new Date(a.updated_at)), 
-            timestamp: now 
-          },
-          budget_sheets: { 
-            data: mergeArr(existingSheets, budget_sheets).sort((a,b) => a.order - b.order), 
-            timestamp: now 
-          },
+          ...(tasksModifiedDuringRequest ? {} : {
+            tasks: {
+              data: mergeArr(existingTasks, tasks).sort((a,b) => new Date(b.created_at) - new Date(a.created_at)),
+              timestamp: now,
+            },
+          }),
+          ...(notesModifiedDuringRequest ? {} : {
+            notes: {
+              data: mergeArr(existingNotes, notes).sort((a,b) => new Date(b.updated_at) - new Date(a.updated_at)),
+              timestamp: now,
+            },
+          }),
+          ...(sheetsModifiedDuringRequest ? {} : {
+            budget_sheets: {
+              data: mergeArr(existingSheets, budget_sheets).sort((a,b) => a.order - b.order),
+              timestamp: now,
+            },
+          }),
         };
       } else {
         // Full sync
         cacheRef.current = {
           ...cacheRef.current,
-          tasks: { data: tasks, timestamp: now },
-          notes: { data: notes, timestamp: now },
-          budget_sheets: { data: budget_sheets, timestamp: now },
+          ...(tasksModifiedDuringRequest ? {} : { tasks: { data: tasks, timestamp: now } }),
+          ...(notesModifiedDuringRequest ? {} : { notes: { data: notes, timestamp: now } }),
+          ...(sheetsModifiedDuringRequest ? {} : { budget_sheets: { data: budget_sheets, timestamp: now } }),
         };
       }
       
-      if (server_time) {
+      const hasConcurrentLocalWrites =
+        tasksModifiedDuringRequest ||
+        notesModifiedDuringRequest ||
+        sheetsModifiedDuringRequest;
+
+      if (server_time && !hasConcurrentLocalWrites) {
         lastSyncRef.current = server_time;
       }
       
@@ -161,11 +182,33 @@ export const DataCacheProvider = ({ children }) => {
       notifyKey('notes');
       notifyKey('budget_sheets');
 
+      // Prefetch settings data in the background (fire-and-forget)
+      // This prevents the Settings page from blocking on a heavy network request locally
+      if (!isDeltaSync && window._settingsPrefetched !== requestStartedAt) {
+        window._settingsPrefetched = requestStartedAt;
+        Promise.all([
+          api.get('/dashboard/stats'),
+          api.get('/dashboard/activity?days=365')
+        ]).then(([statsRes, activityRes]) => {
+          cacheRef.current = {
+            ...cacheRef.current,
+            settingsData: {
+              data: {
+                activityData: activityRes.data,
+                stats: statsRes.data,
+              },
+              timestamp: Date.now()
+            }
+          };
+          notifyKey('settingsData');
+        }).catch(() => {});
+      }
+
       const storageKey = getStorageKey();
       if (storageKey) {
         try {
           localStorage.setItem(storageKey, JSON.stringify(cacheRef.current));
-          if (server_time) {
+          if (server_time && !hasConcurrentLocalWrites) {
             localStorage.setItem(`${storageKey}_sync`, server_time);
           }
         } catch {
@@ -173,7 +216,7 @@ export const DataCacheProvider = ({ children }) => {
       }
     } catch {
     }
-  }, [api, notifyKey, getStorageKey]);
+  }, [api, notifyKey, getStorageKey, getCacheTimestamp]);
 
   // Auto-prefetch when user becomes authenticated, and sync every 60 seconds
   useEffect(() => {
@@ -199,13 +242,14 @@ export const DataCacheProvider = ({ children }) => {
   // Stable context value — never changes reference, prevents consumer re-renders
   const value = useMemo(() => ({
     getCached,
+    getCacheTimestamp,
     setCached,
     isFresh,
     invalidate,
     clearAll,
     prefetchAll,
     subscribe,
-  }), [getCached, setCached, isFresh, invalidate, clearAll, prefetchAll, subscribe]);
+  }), [getCached, getCacheTimestamp, setCached, isFresh, invalidate, clearAll, prefetchAll, subscribe]);
 
   return <DataCacheContext.Provider value={value}>{children}</DataCacheContext.Provider>;
 };
@@ -219,12 +263,23 @@ export const useDataCache = () => {
 };
 
 /**
- * Hook: Fetch data with cache. Returns [data, loading, refetch].
- * Uses subscription pattern so only the component using this key re-renders,
- * NOT the entire provider tree.
+ * Custom hook to fetch data with a built-in stale-while-revalidate caching strategy.
+ * 
+ * **Mechanics**:
+ * 1. **Subscription**: Subscribes to changes for a specific `key`. When the provider's `cacheRef` updates,
+ *    only components subscribed to this specific key will re-render (avoids full tree re-renders).
+ * 2. **Stale-time**: Checks if the data for `key` is fresh (`isFresh()`). If so, returns cached data instantly
+ *    without triggering a network request.
+ * 3. **Sync**: If stale or missing, calls `fetchFn` to fetch new data from the backend, updates the
+ *    cache via `setCached`, and triggers an update.
+ * 
+ * @param {string} key - Unique cache key for this data (e.g., 'notes', 'tasks').
+ * @param {Function} fetchFn - Async function returning the data to cache.
+ * @param {Array} deps - Dependency array to trigger refetches.
+ * @returns {[any, boolean, Function]} - Returns `[data, loading, refetch]`.
  */
 export const useCachedFetch = (key, fetchFn, deps = []) => {
-  const { getCached, isFresh, setCached, subscribe } = useDataCache();
+  const { getCached, getCacheTimestamp, isFresh, setCached, subscribe } = useDataCache();
 
   const cachedData = getCached(key);
   const [data, setData] = useState(cachedData);
@@ -242,7 +297,11 @@ export const useCachedFetch = (key, fetchFn, deps = []) => {
 
   const refetch = useCallback(async (signal) => {
     try {
+      const requestStartedAt = Date.now();
       const result = await fetchFn(signal);
+      if (getCacheTimestamp(key) > requestStartedAt) {
+        return getCached(key);
+      }
       setCached(key, result);
       return result;
     } catch {
@@ -252,7 +311,7 @@ export const useCachedFetch = (key, fetchFn, deps = []) => {
       return null;
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, setCached, ...deps]);
+  }, [key, setCached, getCacheTimestamp, getCached, ...deps]);
 
   useEffect(() => {
     const controller = new AbortController();

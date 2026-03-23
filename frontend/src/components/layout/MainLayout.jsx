@@ -1,7 +1,6 @@
 import { Outlet, Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { Sidebar } from './Sidebar';
-import { Toaster } from '../ui/sonner';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Menu, MoreVertical, CheckSquare, FileText, LogOut } from 'lucide-react';
 import {
@@ -62,7 +61,7 @@ export const MainLayout = () => {
     touchCurrentX.current = null;
   }, [mobileOpen]);
 
-  if (loading) {
+  if (loading && !isAuthenticated) {
     return (
       <div className="min-h-screen bg-background" />
     );
@@ -134,7 +133,6 @@ export const MainLayout = () => {
           <Outlet context={{ isSidebarCollapsed }} />
         </div>
       </main>
-      <Toaster position="bottom-right" richColors />
     </div>
   );
 };

@@ -11,11 +11,12 @@ import {
   Plus, Upload, Download, Trash2, Check, X, FileSpreadsheet,
   MoreHorizontal, Pencil, ChevronUp, ChevronDown, Filter
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+
+const ROW_CACHE_STALE_MS = 30_000;
 
 export const Budget = () => {
   const { api } = useAuth();
-  const { invalidate: invalidateCache } = useDataCache();
+  const { setCached } = useDataCache();
   const [sheets, setSheets] = useState([]);
   const [activeSheetId, setActiveSheetId] = useState(null);
   const [rows, setRows] = useState([]);
@@ -33,6 +34,18 @@ export const Budget = () => {
   const [filterStartDate, setFilterStartDate] = useState('');
   const [filterEndDate, setFilterEndDate] = useState('');
   const csvInputRef = useRef(null);
+
+  /**
+   * Rows Caching Pattern Explained:
+   * Budget rows are fetched per sheet. Instead of refetching from the API
+   * every time the user switches tabs, we use a manual Ref-based cache map
+   * (`rowsCacheRef`).
+   * When `activeSheetId` changes:
+   * 1. We check if `rowsCacheRef` has unexpired data.
+   * 2. If it does, we immediately `setRows()` from cache.
+   * 3. Otherwise, we fetch from API and save it to `rowsCacheRef`.
+   */
+  const rowsCacheRef = useRef(new Map());
 
   // Fetch sheets (cached)
   const [cachedSheets, cacheLoading] = useCachedFetch('budget_sheets', async (signal) => {
@@ -52,20 +65,51 @@ export const Budget = () => {
     }
   }, [cachedSheets, cacheLoading, activeSheetId]);
 
+  const updateSheetsState = useCallback((updater) => {
+    setSheets((prev) => {
+      const nextSheets = typeof updater === 'function' ? updater(prev) : updater;
+      setCached('budget_sheets', nextSheets);
+      return nextSheets;
+    });
+  }, [setCached]);
+
   // Fetch rows for active sheet (not cached — sheet-specific)
-  const fetchRows = useCallback(async (signal) => {
-    if (!activeSheetId) { setRows([]); return; }
+  const setRowsForSheet = useCallback((sheetId, nextRows) => {
+    rowsCacheRef.current.set(sheetId, {
+      data: nextRows,
+      timestamp: Date.now(),
+    });
+
+    if (sheetId === activeSheetId) {
+      setRows(nextRows);
+    }
+  }, [activeSheetId]);
+
+  const fetchRows = useCallback(async ({ signal, force = false } = {}) => {
+    if (!activeSheetId) {
+      setRows([]);
+      return;
+    }
+
+    const cachedRows = rowsCacheRef.current.get(activeSheetId);
+    if (cachedRows) {
+      setRows(cachedRows.data);
+      if (!force && (Date.now() - cachedRows.timestamp) < ROW_CACHE_STALE_MS) {
+        return;
+      }
+    }
+
     try {
       const res = await api.get(`/budget/sheets/${activeSheetId}/rows`, { signal });
-      setRows(res.data);
+      setRowsForSheet(activeSheetId, res.data);
     } catch (error) {
       if (!signal?.aborted) toast.error('Failed to load rows');
     }
-  }, [api, activeSheetId]);
+  }, [activeSheetId, api, setRowsForSheet]);
 
   useEffect(() => {
     const controller = new AbortController();
-    fetchRows(controller.signal);
+    fetchRows({ signal: controller.signal });
     return () => controller.abort();
   }, [activeSheetId, fetchRows]);
 
@@ -74,7 +118,8 @@ export const Budget = () => {
     if (!newSheetName.trim()) return;
     try {
       const res = await api.post('/budget/sheets', { name: newSheetName.trim() });
-      setSheets(prev => [...prev, res.data]);
+      updateSheetsState(prev => [...prev, res.data]);
+      rowsCacheRef.current.set(res.data.id, { data: [], timestamp: Date.now() });
       setActiveSheetId(res.data.id);
       setNewSheetName('');
       setNewSheetDialog(false);
@@ -88,7 +133,7 @@ export const Budget = () => {
     if (!renameName.trim() || !renameDialog) return;
     try {
       await api.put(`/budget/sheets/${renameDialog.id}`, { name: renameName.trim() });
-      setSheets(prev => prev.map(s => s.id === renameDialog.id ? { ...s, name: renameName.trim() } : s));
+      updateSheetsState(prev => prev.map(s => s.id === renameDialog.id ? { ...s, name: renameName.trim() } : s));
       setRenameDialog(null);
       toast.success('Sheet renamed');
     } catch (error) {
@@ -100,8 +145,9 @@ export const Budget = () => {
     if (!deleteConfirm) return;
     try {
       await api.delete(`/budget/sheets/${deleteConfirm.id}`);
+      rowsCacheRef.current.delete(deleteConfirm.id);
       const remaining = sheets.filter(s => s.id !== deleteConfirm.id);
-      setSheets(remaining);
+      updateSheetsState(remaining);
       if (activeSheetId === deleteConfirm.id) {
         setActiveSheetId(remaining.length > 0 ? remaining[0].id : null);
       }
@@ -127,7 +173,7 @@ export const Budget = () => {
         credit: parseFloat(newRow.credit) || 0,
         debit: parseFloat(newRow.debit) || 0,
       });
-      setRows(prev => [res.data, ...prev]);
+      setRowsForSheet(activeSheetId, [res.data, ...rows]);
       setNewRow(null);
     } catch (error) {
       toast.error('Failed to add row');
@@ -137,7 +183,7 @@ export const Budget = () => {
   const deleteRow = async (rowId) => {
     try {
       await api.delete(`/budget/rows/${rowId}`);
-      setRows(prev => prev.filter(r => r.id !== rowId));
+      setRowsForSheet(activeSheetId, rows.filter(r => r.id !== rowId));
     } catch (error) {
       toast.error('Failed to delete row');
     }
@@ -160,7 +206,7 @@ export const Budget = () => {
     }
     try {
       await api.put(`/budget/rows/${rowId}`, { [field]: value });
-      setRows(prev => prev.map(r => r.id === rowId ? { ...r, [field]: value } : r));
+      setRowsForSheet(activeSheetId, rows.map(r => r.id === rowId ? { ...r, [field]: value } : r));
       cancelEdit();
     } catch (error) {
       toast.error('Failed to update');
@@ -188,7 +234,7 @@ export const Budget = () => {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       toast.success(res.data.message);
-      fetchRows();
+      fetchRows({ force: true });
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Import failed');
     }

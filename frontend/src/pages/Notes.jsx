@@ -322,10 +322,29 @@ export const Notes = () => {
   const [isDeletingNote, setIsDeletingNote] = useState(false);
 
   // Refs for Auto-save & Editor Context
+  // --------------------------------------------------------------------------
+  /**
+   * Ref-based Auto-save Pattern Explained:
+   * 
+   * The Tiptap editor fires a 'update' event very frequently. If we used React 
+   * state directly inside the event handler, we would either have stale closures 
+   * (if we don't include state in the dependency array) OR we would constantly 
+   * remove/re-add the event listener (if we do include state), causing performance issues.
+   * 
+   * To solve this:
+   * 1. We keep React state as the ultimate source of truth for the UI (`notes`, `selectedNoteId`).
+   * 2. We keep synchronized `useRef` copies of that state (`notesRef`, `selectedNoteIdRef`).
+   * 3. The `handleUpdate` event listener only reads from the *refs*. Since refs are mutable 
+   *    and persist across renders, the listener always sees the latest state without needing 
+   *    to be re-created and re-attached to the editor.
+   */
   const saveTimeoutRef = useRef(null);
+  const titleSaveTimeoutRef = useRef(null);
   const selectedNoteIdRef = useRef(selectedNoteId);
   const saveContentRef = useRef(null);
+  const editorRef = useRef(null);
   const notesRef = useRef(notes);
+  const noteDetailsCacheRef = useRef(new Map());
 
   useEffect(() => { notesRef.current = notes; }, [notes]);
 
@@ -391,7 +410,6 @@ export const Notes = () => {
           event.preventDefault();
           const node = view.state.schema.nodes.youtube;
           if (node) {
-          const isShorts = text.includes('/shorts/');
             const tr = view.state.tr.replaceSelectionWith(
               node.create({ src: text, width:450, height:270 })
             );

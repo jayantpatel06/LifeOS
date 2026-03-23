@@ -143,7 +143,7 @@ function useToast() {
         listeners.splice(index, 1)
       }
     };
-  }, [state])
+  }, []); // Mount-only: subscribe once, dispatch updates state internally
 
   return {
     ...state,

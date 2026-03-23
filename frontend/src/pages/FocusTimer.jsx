@@ -43,6 +43,12 @@ export const FocusTimer = () => {
     }
   }, [cachedStats]);
 
+  /**
+   * Pomodoro State Machine:
+   * Handles transitions between focus, short_break, and long_break modes.
+   * Tracks completed sessions to trigger a long break every 4th pomodoro.
+   * Also synchronizes the actual duration of the session with the backend.
+   */
   const handleTimerComplete = useCallback(async () => {
     setIsRunning(false);
     clearInterval(intervalRef.current);
@@ -138,12 +144,17 @@ export const FocusTimer = () => {
       // Mark as interrupted — no XP, no stats, no achievements
       try {
         await api.patch(`/focus/${currentSession.id}/complete`, {
-          duration_actual: customDuration * 60 - timeLeft,
+          duration_actual: Math.max(0, Math.floor((totalDurationSeconds - timeLeft) / 60)),
           interrupted: true,
         });
-      } catch {
-        toast.error('Failed to reset the active session');
+      } catch (error) {
+        if (error.response?.status !== 409) {
+          toast.error('Failed to reset the active session');
+          return false;
+        }
       }
+      refetchStats();
+      refreshUser();
       setCurrentSession(null);
     }
 
@@ -152,6 +163,7 @@ export const FocusTimer = () => {
     } else {
       setTimeLeft(TIMER_PRESETS[mode].duration * 60);
     }
+    return true;
   };
 
   const changeMode = (newMode) => {
@@ -172,7 +184,10 @@ export const FocusTimer = () => {
 
   const confirmModeSwitch = async () => {
     if (!resetConfirmMode) return;
-    await resetTimer(); // ends session as interrupted
+    const resetSucceeded = await resetTimer(); // ends session as interrupted
+    if (!resetSucceeded) {
+      return;
+    }
     const newMode = resetConfirmMode;
     setResetConfirmMode(null);
     setMode(newMode);

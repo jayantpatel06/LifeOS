@@ -16,7 +16,6 @@ import {
   RotateCcw, GripVertical, Pin, Flag, ChevronDown,
   Square, CheckSquare, Clock, Flame, ChevronRight
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Separator } from '../components/ui/separator';
@@ -91,7 +90,7 @@ const SortableChecklistItem = ({ id, item, idx, onToggle, onChange, onRemove, co
 };
 
 // Standard Task Card Component (No DnD)
-const TaskCard = ({ task, onClick, onColorUpdate, onDelete, onEdit, onReset, onToggleItem, onPin, onToggleStatus }) => {
+const TaskCard = ({ task, onColorUpdate, onDelete, onEdit, onReset, onToggleItem, onPin }) => {
   const colorConfig = COLORS.find(c => c.bg === task.color) || COLORS[0];
   const checklist = task.checklist || [];
   // Show ALL active items
@@ -209,7 +208,7 @@ const TaskCard = ({ task, onClick, onColorUpdate, onDelete, onEdit, onReset, onT
 export const Tasks = () => {
   const { isSidebarCollapsed } = useOutletContext() || { isSidebarCollapsed: false };
   const { api } = useAuth();
-  const { invalidate: invalidateCache, setCached } = useDataCache();
+  const { setCached } = useDataCache();
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -253,7 +252,7 @@ export const Tasks = () => {
     });
   }, []);
 
-  const [cachedTasks, cacheLoading, refetchTasks] = useCachedFetch('tasks', async (signal) => {
+  const [cachedTasks, cacheLoading] = useCachedFetch('tasks', async (signal) => {
     const response = await api.get('/tasks', { signal });
     return response.data;
   }, [api]);
@@ -270,6 +269,22 @@ export const Tasks = () => {
       setLoading(false);
     }
   }, [cacheLoading, cachedTasks]);
+
+  const applyTaskCollection = useCallback((nextTasks) => {
+    const sortedTasks = sortTasks(nextTasks);
+    setTasks(sortedTasks);
+    setCached('tasks', sortedTasks);
+    return sortedTasks;
+  }, [setCached, sortTasks]);
+
+  const updateTaskCollection = useCallback((updater) => {
+    setTasks((prev) => {
+      const nextTasks = typeof updater === 'function' ? updater(prev) : updater;
+      const sortedTasks = sortTasks(nextTasks);
+      setCached('tasks', sortedTasks);
+      return sortedTasks;
+    });
+  }, [setCached, sortTasks]);
 
   // --- Handlers for Quick Add & Basic Ops ---
 
@@ -309,7 +324,8 @@ export const Tasks = () => {
     };
 
     try {
-      await api.post('/tasks', taskData);
+      const response = await api.post('/tasks', taskData);
+      updateTaskCollection(prev => [response.data, ...prev]);
       toast.success('List created!');
       setQuickTitle('');
       setQuickColor('default');
@@ -317,7 +333,6 @@ export const Tasks = () => {
       setQuickDueDate('');
       setQuickPriority('2');
       setIsQuickAddExpanded(false);
-      fetchTasks();
     } catch (error) {
       toast.error('Failed to create list');
     }
@@ -336,11 +351,11 @@ export const Tasks = () => {
     };
 
     try {
-      await api.put(`/tasks/${editingTask.id}`, taskData);
+      const response = await api.put(`/tasks/${editingTask.id}`, taskData);
+      applyTaskCollection(tasks.map(task => task.id === editingTask.id ? response.data : task));
       toast.success('List updated!');
       setDialogOpen(false);
       setEditingTask(null);
-      fetchTasks();
     } catch (error) {
       toast.error('Failed to update list');
     }
@@ -349,8 +364,8 @@ export const Tasks = () => {
   const handleDelete = async (taskId) => {
     try {
       await api.delete(`/tasks/${taskId}`);
+      updateTaskCollection(prev => prev.filter(t => t.id !== taskId));
       toast.success('List deleted');
-      setTasks(prev => prev.filter(t => t.id !== taskId));
     } catch (error) {
       toast.error('Failed to delete list');
     }
@@ -393,12 +408,14 @@ export const Tasks = () => {
 
   const handlePin = async (task) => {
     const newPinned = !task.is_pinned;
-    setTasks(prev => prev.map(t => t.id === task.id ? { ...t, is_pinned: newPinned } : t));
+    const previousTasks = tasks;
+    updateTaskCollection(prev => prev.map(t => t.id === task.id ? { ...t, is_pinned: newPinned } : t));
     try {
-      await api.put(`/tasks/${task.id}`, { is_pinned: newPinned });
+      const response = await api.put(`/tasks/${task.id}`, { is_pinned: newPinned });
+      updateTaskCollection(prev => prev.map(t => t.id === task.id ? response.data : t));
       toast.success(newPinned ? 'Task pinned' : 'Task unpinned');
     } catch (error) {
-      fetchTasks();
+      applyTaskCollection(previousTasks);
       toast.error('Failed to update pin status');
     }
   };
@@ -406,22 +423,42 @@ export const Tasks = () => {
   const handleColorUpdate = async (task, colorId) => {
     const colorObj = COLORS.find(c => c.id === colorId);
     if (!colorObj) return;
-    setTasks(prev => prev.map(t => t.id === task.id ? { ...t, color: colorObj.bg } : t));
-    try { await api.put(`/tasks/${task.id}`, { color: colorObj.bg }); } catch (error) { fetchTasks(); }
+    const previousTasks = tasks;
+    updateTaskCollection(prev => prev.map(t => t.id === task.id ? { ...t, color: colorObj.bg } : t));
+    try {
+      const response = await api.put(`/tasks/${task.id}`, { color: colorObj.bg });
+      updateTaskCollection(prev => prev.map(t => t.id === task.id ? response.data : t));
+    } catch (error) {
+      applyTaskCollection(previousTasks);
+    }
   };
 
   const handleReset = async (task) => {
     if (!task.checklist || task.checklist.length === 0) return;
     const newChecklist = task.checklist.map(item => ({ ...item, completed: false }));
-    setTasks(prev => prev.map(t => t.id === task.id ? { ...t, checklist: newChecklist } : t));
-    try { await api.put(`/tasks/${task.id}`, { checklist: newChecklist }); toast.success('List reset!'); } catch (error) { fetchTasks(); toast.error('Failed to reset list'); }
+    const previousTasks = tasks;
+    updateTaskCollection(prev => prev.map(t => t.id === task.id ? { ...t, checklist: newChecklist } : t));
+    try {
+      const response = await api.put(`/tasks/${task.id}`, { checklist: newChecklist });
+      updateTaskCollection(prev => prev.map(t => t.id === task.id ? response.data : t));
+      toast.success('List reset!');
+    } catch (error) {
+      applyTaskCollection(previousTasks);
+      toast.error('Failed to reset list');
+    }
   };
 
   const handleToggleItem = async (task, itemToToggle) => {
     if (!task.checklist) return;
     const newChecklist = task.checklist.map(i => i === itemToToggle ? { ...i, completed: !i.completed } : i);
-    setTasks(prev => prev.map(t => t.id === task.id ? { ...t, checklist: newChecklist } : t));
-    try { await api.put(`/tasks/${task.id}`, { checklist: newChecklist }); } catch (error) { fetchTasks(); }
+    const previousTasks = tasks;
+    updateTaskCollection(prev => prev.map(t => t.id === task.id ? { ...t, checklist: newChecklist } : t));
+    try {
+      const response = await api.put(`/tasks/${task.id}`, { checklist: newChecklist });
+      updateTaskCollection(prev => prev.map(t => t.id === task.id ? response.data : t));
+    } catch (error) {
+      applyTaskCollection(previousTasks);
+    }
   };
 
   // --- Drag and Drop Handlers (Checklist Only) ---

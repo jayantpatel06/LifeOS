@@ -311,8 +311,8 @@ export const Auth = () => {
         </div>
 
         {/* Mobile feature pills - auto-scroll glassmorphism */}
-        <div className="flex lg:hidden overflow-hidden shrink-0 py-4 px-214">
-  2        <div className="flex gap-2.5" style={{animation: 'pill-scroll 30s linear infinite' }}>
+        <div className="flex lg:hidden overflow-hidden shrink-0 py-4 px-4">
+          <div className="flex gap-2.5" style={{ animation: 'pill-scroll 30s linear infinite' }}>
             {[...features, ...features, ...features, ...features].map((feature, index) => (
               <div
                 key={`pill-m-${index}`}

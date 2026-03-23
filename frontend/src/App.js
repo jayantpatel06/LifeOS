@@ -19,7 +19,7 @@ import { Settings } from "./pages/Settings";
 const PublicRoute = ({ children }) => {
   const { isAuthenticated, loading } = useAuth();
 
-  if (loading) {
+  if (loading && !isAuthenticated) {
     return (
       <div className="min-h-screen bg-background animate-in fade-in duration-200" />
     );
